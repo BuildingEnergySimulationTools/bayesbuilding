@@ -32,7 +32,7 @@ setup(
         "pymc>=5.10.3",
         "pandas>=1.3.4",
         "numpy>=1.26.3",
-        "arviz>=0.17.0"
+        "arviz>=0.17.0",
     ],
     packages=find_packages(exclude=["tests*"]),
     include_package_data=True,

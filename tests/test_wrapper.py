@@ -1,9 +1,10 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pymc as pm
 
-from bayesbuilding.wrapper import PymcWrapper
 from bayesbuilding.models import season_cp_heating_es
+from bayesbuilding.wrapper import PymcWrapper
+
 
 class TestWrapper:
     def test_pymc_wrapper(self):
@@ -67,13 +68,16 @@ class TestWrapper:
             sample_kwargs={"random_seed": 42},
         )
 
-        assert round(
-            test_model.get_summary(group="sampling").loc["g", "mean"], 1) == 47.6
+        assert (
+                round(test_model.get_summary(group="sampling").loc["g", "mean"],
+                      1) == 47.6
+        )
         assert round(test_model.get_summary(group="sampling").loc["g", "sd"], 1) == 1.9
 
         score_res = test_model.score(
-            x=data_test[["Text"]], y=data_test["heating"],
-            sample_kwargs={"random_seed": 42}
+            x=data_test[["Text"]],
+            y=data_test["heating"],
+            sample_kwargs={"random_seed": 42},
         )
 
         score_res = {key: round(val, 2) for key, val in score_res.items()}

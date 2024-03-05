@@ -1,8 +1,9 @@
 from collections.abc import Callable
-import pymc as pm
+
 import arviz as az
 import numpy as np
 import pandas as pd
+import pymc as pm
 
 
 def r2_score(y_true, y_pred):
@@ -79,7 +80,8 @@ class PymcWrapper:
         Samples from the posterior predictive distribution.
     get_summary():
         Returns a summary of the posterior distribution. Use the 'group' argument to
-        select among 'prior', 'prior_predictive', 'posterior', or 'posterior_predictive'.
+        select among 'prior', 'prior_predictive', 'posterior', or
+        'posterior_predictive'.
     get_loo_score():
         Computes the leave-one-out cross-validation (LOO) score.
     """
@@ -98,7 +100,7 @@ class PymcWrapper:
         self.traces = {
             "prior": az.data.inference_data.InferenceData(),
             "sampling": az.data.inference_data.InferenceData(),
-            "posterior": az.data.inference_data.InferenceData()
+            "posterior": az.data.inference_data.InferenceData(),
         }
         self._x_train = None
         self._y_train = None
@@ -111,15 +113,9 @@ class PymcWrapper:
             # Set empty data objects
             self._data_dict = {
                 "x": pm.MutableData(
-                    name="x",
-                    value=np.array([[]]),
-                    dims=["date", "features"]
+                    name="x", value=np.array([[]]), dims=["date", "features"]
                 ),
-                "y": pm.MutableData(
-                    name="y",
-                    value=np.array([]),
-                    dims=["target"]
-                ),
+                "y": pm.MutableData(name="y", value=np.array([]), dims=["target"]),
             }
 
             # Set priors
@@ -135,7 +131,8 @@ class PymcWrapper:
             # Combine into likelihood function
             sigma = (
                 self._variables_dict["sigma"][
-                    self._data_dict["x"][:, self.sigma_change_point_idx]]
+                    self._data_dict["x"][:, self.sigma_change_point_idx]
+                ]
                 if self.sigma_change_point_idx is not None
                 else self._variables_dict["sigma"]
             )
@@ -182,7 +179,8 @@ class PymcWrapper:
                 self.features_names = list(x.columns)
 
             self.traces["prior"] = pm.sample_prior_predictive(
-                samples=samples, var_names=var_names, **sample_kwargs)
+                samples=samples, var_names=var_names, **sample_kwargs
+            )
 
     def sample(
             self,
@@ -205,7 +203,8 @@ class PymcWrapper:
             self.target_name = y.name
 
             self.traces["sampling"] = pm.sample(
-                draws=draws, tune=tune, chains=chains, **sample_kwargs)
+                draws=draws, tune=tune, chains=chains, **sample_kwargs
+            )
 
         self.sample_posterior_predictive()
 
@@ -214,8 +213,10 @@ class PymcWrapper:
 
     def sample_posterior_predictive(self, x: pd.DataFrame = None, sample_kwargs=None):
         if self.traces["sampling"] is None:
-            raise ValueError("No posterior trace available. Perform sampling before"
-                             "sampling from posterior")
+            raise ValueError(
+                "No posterior trace available. Perform sampling before"
+                "sampling from posterior"
+            )
 
         if sample_kwargs is None:
             sample_kwargs = {}
@@ -236,7 +237,8 @@ class PymcWrapper:
     ):
         if group not in self.traces.keys():
             raise ValueError(
-                f"Unknown group {group} choose one of {self.traces.keys()}")
+                f"Unknown group {group} choose one of {self.traces.keys()}"
+            )
         if summary_kwargs is None:
             summary_kwargs = {}
 
@@ -249,12 +251,14 @@ class PymcWrapper:
 
     def get_loo_score(self, loo_kwargs=None):
         if self.traces["sampling"] is None:
-            raise ValueError("Sampling trace is not available, perform sampling "
-                             "before checking loo score")
+            raise ValueError(
+                "Sampling trace is not available, perform sampling "
+                "before checking loo score"
+            )
         if loo_kwargs is None:
             loo_kwargs = {}
         with self.model:
-            pm.set_data({'x': self._x_train, 'y': self._y_train})
+            pm.set_data({"x": self._x_train, "y": self._y_train})
             pm.compute_log_likelihood(self.traces["sampling"])
         return az.loo(data=(self.traces["sampling"]), **loo_kwargs)
 
