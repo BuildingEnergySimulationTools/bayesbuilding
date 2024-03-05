@@ -69,8 +69,7 @@ class TestWrapper:
         )
 
         assert (
-                round(test_model.get_summary(group="sampling").loc["g", "mean"],
-                      1) == 47.6
+            round(test_model.get_summary(group="sampling").loc["g", "mean"], 1) == 47.6
         )
         assert round(test_model.get_summary(group="sampling").loc["g", "sd"], 1) == 1.9
 

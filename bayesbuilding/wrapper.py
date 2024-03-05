@@ -87,10 +87,10 @@ class PymcWrapper:
     """
 
     def __init__(
-            self,
-            model_function: Callable,
-            priors_dict: dict[str:(Callable, dict)],
-            sigma_change_point_idx=None,
+        self,
+        model_function: Callable,
+        priors_dict: dict[str:(Callable, dict)],
+        sigma_change_point_idx=None,
     ):
         self.model_function = model_function
         self.var_names = list(priors_dict.keys())
@@ -165,11 +165,11 @@ class PymcWrapper:
         return string_out
 
     def sample_prior(
-            self,
-            samples: int = 500,
-            x: pd.DataFrame = None,
-            var_names=None,
-            sample_kwargs=None,
+        self,
+        samples: int = 500,
+        x: pd.DataFrame = None,
+        var_names=None,
+        sample_kwargs=None,
     ):
         if sample_kwargs is None:
             sample_kwargs = {}
@@ -183,13 +183,13 @@ class PymcWrapper:
             )
 
     def sample(
-            self,
-            y: pd.Series,
-            x: pd.DataFrame = None,
-            draws: int = 1000,
-            tune: int = 1000,
-            chains=None,
-            sample_kwargs=None,
+        self,
+        y: pd.Series,
+        x: pd.DataFrame = None,
+        draws: int = 1000,
+        tune: int = 1000,
+        chains=None,
+        sample_kwargs=None,
     ):
         if sample_kwargs is None:
             sample_kwargs = {}
@@ -232,8 +232,7 @@ class PymcWrapper:
             )
 
     def get_summary(
-            self, group: str = None, var_names=None, filter_vars=None,
-            summary_kwargs=None
+        self, group: str = None, var_names=None, filter_vars=None, summary_kwargs=None
     ):
         if group not in self.traces.keys():
             raise ValueError(
@@ -263,11 +262,11 @@ class PymcWrapper:
         return az.loo(data=(self.traces["sampling"]), **loo_kwargs)
 
     def score(
-            self,
-            x: pd.DataFrame,
-            y: pd.Series,
-            score_function: Callable = r2_score,
-            sample_kwargs: dict = None,
+        self,
+        x: pd.DataFrame,
+        y: pd.Series,
+        score_function: Callable = r2_score,
+        sample_kwargs: dict = None,
     ):
         if sample_kwargs is None:
             sample_kwargs = {}
