@@ -276,6 +276,6 @@ class PymcWrapper:
         flattened_trace = np.array(post_trace).reshape(-1, post_trace.shape[-1])
 
         scores_array = np.array(
-            [score_function(y, sample) for sample in flattened_trace])
-
+            [score_function(y, sample) for sample in flattened_trace]
+        )
         return {"mean_score": np.mean(scores_array), "sd_score": np.std(scores_array)}
