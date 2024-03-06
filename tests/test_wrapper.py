@@ -4,7 +4,7 @@ import pymc as pm
 
 from bayesbuilding.models import season_cp_heating_es
 from bayesbuilding.wrapper import PymcWrapper
-from bayesbuilding.plotting import time_series_hdi
+from bayesbuilding.plotting import time_series_hdi, changepoint_graph
 
 
 class TestWrapper:
@@ -59,6 +59,7 @@ class TestWrapper:
         test_model.sample_prior(
             samples=4000, x=data_train[["Text"]], sample_kwargs={"random_seed": 42}
         )
+
         assert round(test_model.get_summary(group="prior").loc["g", "mean"], 1) == 40.1
         assert round(test_model.get_summary(group="prior").loc["g", "sd"], 1) == 5.0
 
@@ -103,4 +104,24 @@ class TestWrapper:
             title="Posterior model accuracy",
             y_label="Energy consumption [kWh]",
             backend="matplotlib",
+        )
+
+        changepoint_graph(
+            data["Text"],
+            data["heating"],
+            test_model.traces["posterior"].posterior_predictive["observations"],
+            backend="plotly",
+            x_label="text",
+            y_label="heating",
+            title="test",
+        )
+
+        changepoint_graph(
+            data["Text"],
+            data["heating"],
+            test_model.traces["posterior"].posterior_predictive["observations"],
+            backend="matplotlib",
+            x_label="text",
+            y_label="heating",
+            title="test",
         )
