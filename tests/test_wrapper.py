@@ -1,9 +1,13 @@
 import numpy as np
 import pandas as pd
 import pymc as pm
+import plotly.io as pio
 
 from bayesbuilding.models import season_cp_heating_es
 from bayesbuilding.wrapper import PymcWrapper
+from bayesbuilding.plotting import time_series_hdi
+
+pio.renderers.default = "browser"
 
 
 class TestWrapper:
@@ -83,3 +87,23 @@ class TestWrapper:
         assert score_res == {"mean_score": 0.76, "sd_score": 0.07}
 
         test_model.get_loo_score()
+
+        test_model.sample_posterior_predictive(data[["Text"]])
+        time_series_hdi(
+            measure_ts=data["heating"],
+            prediction=test_model.traces["posterior"].posterior_predictive[
+                "observations"
+            ],
+            title="Posterior model accuracy",
+            y_label="Energy consumption [kWh]",
+            backend="plotly",
+        )
+        time_series_hdi(
+            measure_ts=data["heating"],
+            prediction=test_model.traces["posterior"].posterior_predictive[
+                "observations"
+            ],
+            title="Posterior model accuracy",
+            y_label="Energy consumption [kWh]",
+            backend="matplotlib",
+        )
