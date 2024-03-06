@@ -275,10 +275,7 @@ class PymcWrapper:
         post_trace = self.traces["posterior"].posterior_predictive["observations"]
         flattened_trace = np.array(post_trace).reshape(-1, post_trace.shape[-1])
 
-        scores = []
-        for sample in flattened_trace:
-            r2 = score_function(y, sample)
-            scores.append(r2)
-        scores_array = np.array(scores)
+        scores_array = np.array(
+            [score_function(y, sample) for sample in flattened_trace])
 
         return {"mean_score": np.mean(scores_array), "sd_score": np.std(scores_array)}
