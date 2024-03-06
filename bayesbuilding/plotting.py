@@ -1,9 +1,9 @@
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import plotly.graph_objs as go
-from plotly.subplots import make_subplots
 import xarray
+from plotly.subplots import make_subplots
 
 
 def time_series_hdi(

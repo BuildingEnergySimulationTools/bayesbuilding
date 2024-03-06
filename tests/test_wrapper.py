@@ -6,6 +6,7 @@ from bayesbuilding.models import season_cp_heating_es
 from bayesbuilding.wrapper import PymcWrapper
 from bayesbuilding.plotting import time_series_hdi
 
+
 class TestWrapper:
     def test_pymc_wrapper(self):
         data = pd.DataFrame(
