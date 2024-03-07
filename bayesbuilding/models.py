@@ -75,3 +75,25 @@ def season_cp_heating_es(x, variable_dict):
 
     consumption = g * pm.math.maximum(tau - t_ext, 0)
     return consumption + baseline
+
+
+def occ_cp_radiation_lighting(x, variable_dict):
+    """
+    Artificial Lighting energy consumption model.
+    Depending on the occupation, returns a baseline_we consumption (weekends, holidays),
+    or an external radiation dependant term + baseline_wd
+
+    :param variable_dict: mandatory model variables are :
+    - base_we: baseline with no occupation
+    - base_wd: baseline during weekdays
+    - fs: coefficient to account for natural lighting based on solar radiations
+    :param x: x[:, 0] is boolean series or 0-1 describing 2 occupation behaviour,
+        x[:, 1] is solar radiation. For solar radiation, use Global horizontal,
+        or custom projection.
+    """
+
+    fs = variable_dict["fs"]
+    base_we = variable_dict["base_we"]
+    base_wd = variable_dict["base_wd"]
+
+    return pm.math.switch(x[:, 0], base_we, base_wd + fs * x[:, 1])
