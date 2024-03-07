@@ -131,7 +131,7 @@ class PymcWrapper:
             # Combine into likelihood function
             sigma = (
                 self._variables_dict["sigma"][
-                    self._data_dict["x"][:, self.sigma_change_point_idx]
+                    self._data_dict["x"][:, self.sigma_change_point_idx].astype(int)
                 ]
                 if self.sigma_change_point_idx is not None
                 else self._variables_dict["sigma"]
