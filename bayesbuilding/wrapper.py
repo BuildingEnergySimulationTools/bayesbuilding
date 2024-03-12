@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from pathlib import Path
+import os
 
 import arviz as az
 import numpy as np
@@ -84,6 +86,10 @@ class PymcWrapper:
         'posterior_predictive'.
     get_loo_score():
         Computes the leave-one-out cross-validation (LOO) score.
+    save_traces(Path):
+        Save the 3 traces contained in traces dictionary to the required path.
+    load_traces(Path):
+        load the 3 traces in traces dictionary using the required path.
     """
 
     def __init__(
@@ -279,3 +285,17 @@ class PymcWrapper:
             [score_function(y, sample) for sample in flattened_trace]
         )
         return {"mean_score": np.mean(scores_array), "sd_score": np.std(scores_array)}
+
+    def save_traces(self, dir_path: Path):
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+
+        for name, traces in self.traces.items():
+            traces.to_netcdf((dir_path / f"{name}.nc").as_posix())
+
+    def load_traces(self, dir_path: Path):
+        if not os.path.exists(dir_path):
+            raise ValueError(f"Provided dir_path : {dir_path} not found")
+
+        for name, _ in self.traces.items():
+            self.traces[name] = az.from_netcdf((dir_path / f"{name}.nc").as_posix())
