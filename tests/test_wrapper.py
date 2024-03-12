@@ -1,14 +1,17 @@
+from pathlib import Path
+
+import arviz as az
 import numpy as np
 import pandas as pd
 import pymc as pm
 
 from bayesbuilding.models import season_cp_heating_es
-from bayesbuilding.wrapper import PymcWrapper
 from bayesbuilding.plotting import time_series_hdi, changepoint_graph
+from bayesbuilding.wrapper import PymcWrapper
 
 
 class TestWrapper:
-    def test_pymc_wrapper(self):
+    def test_pymc_wrapper(self, tmp_path):
         data = pd.DataFrame(
             {
                 "Text": [
@@ -87,6 +90,18 @@ class TestWrapper:
         test_model.get_loo_score()
 
         test_model.sample_posterior_predictive(data[["Text"]])
+
+        # === test save / load ===
+        test_model.save_traces(Path(tmp_path))
+
+        for key, _ in test_model.traces.items():
+            test_model.traces[key] = None
+
+        test_model.load_traces(Path(tmp_path))
+        for _, trace in test_model.traces.items():
+            assert isinstance(trace, az.data.inference_data.InferenceData)
+
+        # === test plots ===
         time_series_hdi(
             measure_ts=data["heating"],
             prediction=test_model.traces["posterior"].posterior_predictive[
