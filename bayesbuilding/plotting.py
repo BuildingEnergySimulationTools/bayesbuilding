@@ -1,3 +1,4 @@
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -291,3 +292,112 @@ def changepoint_graph(
             f"{backend} is an invalid backend argument, choose one of"
             f"'plotly' or 'matplotlib"
         )
+
+
+def time_series_bar_plot(
+    measure: pd.Series,
+    prediction: np.ndarray | xarray.core.dataarray.DataArray,
+    lower_q=0.025,
+    upper_q=0.975,
+    upper_cut=None,
+    lower_cut=None,
+    bar_width=0.35,
+    title: str = None,
+    y_label: str = None,
+):
+    """
+    Generate a time series bar plot comparing a measure against a prediction with
+    error bars representing quantiles.
+
+    Args:
+        measure (pd.Series): The measured values as a Pandas Series.
+        prediction (np.ndarray or xarray.core.dataarray.DataArray):
+            The predicted values or data array.
+        lower_q (float, optional): The lower quantile for the error bars.
+        Defaults to 0.025.
+        upper_q (float, optional): The upper quantile for the error bars.
+        Defaults to 0.975.
+        upper_cut (float, optional): Upper limit for outliers. Defaults to None.
+        lower_cut (float, optional): Lower limit for outliers. Defaults to None.
+        bar_width (float, optional): Width of each bar. Defaults to 0.35.
+        title (str, optional): Title for the plot. Defaults to None.
+        y_label (str, optional): Label for the y-axis. Defaults to None.
+    """
+
+    lower_q, med, upper_q = _prepare_quantiles(
+        prediction, lower_q, upper_q, lower_cut, upper_cut
+    )
+
+    index = range(len(measure.index))
+
+    plt.figure(figsize=(6, 5))
+    plt.bar(
+        [i - bar_width / 2 for i in index],
+        med,
+        width=bar_width,
+        yerr=[med - lower_q, upper_q - med],
+        capsize=10,
+        label="Modèle",
+    )
+    plt.bar(
+        [i + bar_width / 2 for i in index], measure, width=bar_width, label="Mesure"
+    )
+    plt.title(title)
+    plt.ylabel(y_label)
+    plt.xticks(index, measure.index)
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+    plt.tight_layout()
+    plt.legend()
+    plt.show()
+
+
+def compare_bars(
+    measure: float,
+    prediction: np.ndarray | xarray.core.dataarray.DataArray,
+    lower_q=0.025,
+    upper_q=0.975,
+    upper_cut=None,
+    lower_cut=None,
+    title: str = None,
+    y_label: str = None,
+    measure_label: str = "Measure",
+    prediction_label: str = "Model",
+):
+    """
+    Compare a measure against a prediction using bar plots with error bars
+    representing quantiles.
+
+    Args:
+        measure (float): The measured value to compare against the prediction.
+        prediction (np.ndarray or xarray.core.dataarray.DataArray):
+            The predicted values or data array.
+        lower_q (float, optional): The lower quantile for the error bars.
+        Defaults to 0.025.
+        upper_q (float, optional): The upper quantile for the error bars.
+        Defaults to 0.975.
+        upper_cut (float, optional): Upper limit for outliers. Defaults to None.
+        lower_cut (float, optional): Lower limit for outliers. Defaults to None.
+        title (str, optional): Title for the plot. Defaults to None.
+        y_label (str, optional): Label for the y-axis. Defaults to None.
+        measure_label (str, optional): Label for the measure. Defaults to "Measure".
+        prediction_label (str, optional): Label for the prediction. Defaults to "Model".
+    """
+
+    lower_q, med, upper_q = _prepare_quantiles(
+        prediction, lower_q, upper_q, lower_cut, upper_cut
+    )
+
+    plt.figure(figsize=(6, 5))
+    plt.bar(
+        0,
+        med,
+        yerr=[[med - lower_q], [upper_q - med]],
+        capsize=10,
+        label=prediction_label,
+    )
+    plt.bar(1, measure, label=measure_label)
+    plt.title(title)
+    plt.ylabel(y_label)
+    plt.xticks([0, 1], [prediction_label, measure_label])
+
+    plt.show()
