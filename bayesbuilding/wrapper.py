@@ -1,6 +1,9 @@
+import json
+import os
 from collections.abc import Callable
 from pathlib import Path
-import os
+import bayesbuilding
+import warnings
 
 import arviz as az
 import numpy as np
@@ -12,6 +15,13 @@ def r2_score(y_true, y_pred):
     numerator = ((y_true - y_pred) ** 2).sum(axis=0)
     denominator = ((y_true - np.average(y_true, axis=0)) ** 2).sum(axis=0)
     return 1 - numerator / denominator
+
+
+def custom_serializer(obj):
+    if callable(obj) and hasattr(obj, "__name__"):
+        return obj.__name__
+    else:
+        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
 class PymcWrapper:
@@ -86,20 +96,25 @@ class PymcWrapper:
         'posterior_predictive'.
     get_loo_score():
         Computes the leave-one-out cross-validation (LOO) score.
-    save_traces(Path):
-        Save the 3 traces contained in traces dictionary to the required path.
-    load_traces(Path):
-        load the 3 traces in traces dictionary using the required path.
+    save_model(Path):
+        Save the model to the required path. It will contain 3 traces
+        and a json file.
+    load_model(Path):
+        Load the model traces and json file contained in the desired path and build
+        the pymc model.
+        If the loaded model function is not in bayesbuilding.model, it must
+        be provided separately and the pymc model must be build using the build_model()
+        method.
     """
 
     def __init__(
         self,
-        model_function: Callable,
-        priors_dict: dict[str:(Callable, dict)],
+        model_function: Callable = None,
+        priors_dict: dict[str:(Callable, dict)] = None,
         sigma_change_point_idx=None,
     ):
         self.model_function = model_function
-        self.var_names = list(priors_dict.keys())
+        self.priors_dict = priors_dict
         self.features_names = None
         self.target_name = None
         self.sigma_change_point_idx = sigma_change_point_idx
@@ -114,42 +129,98 @@ class PymcWrapper:
         self._data_dict = None
         self._variables_dict = None
 
-        self.model = pm.Model()
-        with self.model:
-            # Set empty data objects
-            self._data_dict = {
-                "x": pm.MutableData(
-                    name="x", value=np.array([[]]), dims=["date", "features"]
-                ),
-                "y": pm.MutableData(name="y", value=np.array([]), dims=["target"]),
+        self.build_model()
+
+    def save_model(self, dir_path: Path):
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+
+        for name, traces in self.traces.items():
+            traces.to_netcdf((dir_path / f"{name}.nc").as_posix())
+
+        with open(dir_path / "config.json", "w", encoding="utf-8") as f:
+            to_dump = {
+                "model_function": self.model_function,
+                "priors_dict": self.priors_dict,
+                "sigma_change_point_idx": self.sigma_change_point_idx,
+                "features_names": self.features_names,
+                "target_name": self.target_name,
             }
-
-            # Set priors
-            self._variables_dict = {
-                name: val[0](**val[1]) for name, val in priors_dict.items()
-            }
-
-            mu = pm.Deterministic(
-                name="mu",
-                var=self.model_function(self._data_dict["x"], self._variables_dict),
+            json.dump(
+                to_dump, f, ensure_ascii=False, default=custom_serializer, indent=4
             )
 
-            # Combine into likelihood function
-            sigma = (
-                self._variables_dict["sigma"][
-                    self._data_dict["x"][:, self.sigma_change_point_idx].astype(int)
-                ]
-                if self.sigma_change_point_idx is not None
-                else self._variables_dict["sigma"]
-            )
+    def load_model(self, dir_path: Path):
+        if not os.path.exists(dir_path):
+            raise ValueError(f"Provided dir_path : {dir_path} not found")
 
-            self._observations = pm.Normal(
-                name="observations",
-                mu=mu,
-                sigma=sigma,
-                observed=self._data_dict["y"],
-                shape=self._data_dict["x"].shape[0],
-            )
+        for name, _ in self.traces.items():
+            self.traces[name] = az.from_netcdf((dir_path / f"{name}.nc").as_posix())
+
+        with open(dir_path / "config.json", encoding="utf-8") as f:
+            config_dict = json.load(f)
+
+        for attr, value in config_dict.items():
+            setattr(self, attr, value)
+
+        for val in self.priors_dict.values():
+            val[0] = getattr(pm, val[0])
+
+        if self.model_function is not None:
+            try:
+                self.model_function = getattr(bayesbuilding.models, self.model_function)
+            except AttributeError:
+                warnings.warn(
+                    f"Model function {self.model_function} not found in"
+                    f"bayesbuilding.models. Load a model function before running"
+                    f"build_model() method"
+                )
+                self.model_function = None
+
+        self.build_model()
+
+    def build_model(self):
+        if self.model_function is not None and self.priors_dict is not None:
+            self.model = pm.Model()
+            with self.model:
+                # Set empty data objects
+                self._data_dict = {
+                    "x": pm.MutableData(
+                        name="x", value=np.array([[]]), dims=["date", "features"]
+                    ),
+                    "y": pm.MutableData(name="y", value=np.array([]), dims=["target"]),
+                }
+
+                # Set priors
+                self._variables_dict = {
+                    name: val[0](**val[1]) for name, val in self.priors_dict.items()
+                }
+
+                mu = pm.Deterministic(
+                    name="mu",
+                    var=self.model_function(self._data_dict["x"], self._variables_dict),
+                )
+
+                # Combine into likelihood function
+                sigma = (
+                    self._variables_dict["sigma"][
+                        self._data_dict["x"][:, self.sigma_change_point_idx].astype(int)
+                    ]
+                    if self.sigma_change_point_idx is not None
+                    else self._variables_dict["sigma"]
+                )
+
+                self._observations = pm.Normal(
+                    name="observations",
+                    mu=mu,
+                    sigma=sigma,
+                    observed=self._data_dict["y"],
+                    shape=self._data_dict["x"].shape[0],
+                )
+            self.var_names = list(self.priors_dict.keys())
+        else:
+            self.var_names = None
+            self.model = None
 
     def __repr__(self):
         string_out = """"""
@@ -285,17 +356,3 @@ class PymcWrapper:
             [score_function(y, sample) for sample in flattened_trace]
         )
         return {"mean_score": np.mean(scores_array), "sd_score": np.std(scores_array)}
-
-    def save_traces(self, dir_path: Path):
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
-
-        for name, traces in self.traces.items():
-            traces.to_netcdf((dir_path / f"{name}.nc").as_posix())
-
-    def load_traces(self, dir_path: Path):
-        if not os.path.exists(dir_path):
-            raise ValueError(f"Provided dir_path : {dir_path} not found")
-
-        for name, _ in self.traces.items():
-            self.traces[name] = az.from_netcdf((dir_path / f"{name}.nc").as_posix())
