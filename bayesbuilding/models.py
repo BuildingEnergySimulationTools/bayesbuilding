@@ -1,7 +1,7 @@
 import pymc as pm
 
 
-def occupation_changepoint(x, variables_dict: dict):
+def occ_cp(x, variables_dict: dict):
     """
     Model a system assuming it has two distinct fairly constant behaviour
     during specified period. For example week-days and weekends, or holidays.
@@ -77,7 +77,34 @@ def season_cp_heating_es(x, variable_dict):
     return consumption + baseline
 
 
-def occ_cp_radiation_lighting(x, variable_dict):
+def season_cp_occ_cp_heating_es(x, variable_dict):
+    """
+    Seasonal Change Point Heating Energy Signature
+
+    During winter the overall building energy consumption is modeled as a linear
+    function : Text * G + baseline. Where G is the overall heat loss [kWh/°C]
+    and baseline is the "process" energy consumption.
+    During summer, only baseline remains.
+    The changepoint tau is based on the exterior temperature
+    n distinct function for n occupation typologie
+
+    :param x: 2D array. x[:, 0] is the occupation index, x[:, 1] is the esternal
+    air temperature
+    :param variable_dict: mandatory model variables are : "g", "tau", "base". Each
+    variables have a shape of diemension n.
+    :return: energy consumption
+    """
+    occ = x[:, 0].astype(int)
+    t_ext = x[:, 1]
+    g = variable_dict["g"]
+    tau = variable_dict["tau"]
+    baseline = variable_dict["baseline"]
+
+    consumption = g[occ] * pm.math.maximum(tau[occ] - t_ext, 0)
+    return consumption + baseline[occ]
+
+
+def we_cst_wd_radiation_lighting(x, variable_dict):
     """
     Artificial Lighting energy consumption model.
     Depending on the occupation, returns a baseline_we consumption (weekends, holidays),
