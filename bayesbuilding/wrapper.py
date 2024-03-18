@@ -131,6 +131,26 @@ class PymcWrapper:
 
         self.build_model()
 
+    def __repr__(self):
+        string_out = """"""
+        string_out += """=== Variables names : \n"""
+        if self.var_names is not None:
+            for var in self.var_names:
+                string_out += f"""- {var} \n"""
+        string_out += """\n"""
+
+        string_out += """=== Features names: \n"""
+        if self.features_names is not None:
+            for feat in self.features_names:
+                string_out += f"""- {feat} \n"""
+        string_out += """\n"""
+
+        string_out += """=== Target name: \n"""
+        if self.target_name is not None:
+            string_out += f"""- {self.target_name} \n"""
+
+        return string_out
+
     def save_model(self, dir_path: Path):
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
@@ -221,25 +241,6 @@ class PymcWrapper:
         else:
             self.var_names = None
             self.model = None
-
-    def __repr__(self):
-        string_out = """"""
-        string_out += """=== Variables names : \n"""
-        for var in self.var_names:
-            string_out += f"""- {var} \n"""
-        string_out += """\n"""
-
-        string_out += """=== Features names: \n"""
-        if self.features_names is not None:
-            for feat in self.features_names:
-                string_out += f"""- {feat} \n"""
-        string_out += """\n"""
-
-        string_out += """=== Target name: \n"""
-        if self.target_name is not None:
-            string_out += f"""- {self.target_name} \n"""
-
-        return string_out
 
     def sample_prior(
         self,
