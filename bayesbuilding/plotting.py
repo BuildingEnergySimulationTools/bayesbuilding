@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.graph_objs as go
 import xarray
 from plotly.subplots import make_subplots
+from pathlib import Path
 
 
 def _prepare_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
@@ -354,14 +355,16 @@ def time_series_bar_plot(
 def compare_bars(
     measure: float,
     prediction: np.ndarray | xarray.core.dataarray.DataArray,
-    lower_q=0.025,
-    upper_q=0.975,
-    upper_cut=None,
-    lower_cut=None,
+    lower_q: float = 0.025,
+    upper_q: float = 0.975,
+    upper_cut: int | float = None,
+    lower_cut: int | float = None,
     title: str = None,
     y_label: str = None,
     measure_label: str = "Measure",
     prediction_label: str = "Model",
+    image_path: Path = None,
+    font_size: int = 12,
 ):
     """
     Compare a measure against a prediction using bar plots with error bars
@@ -381,6 +384,8 @@ def compare_bars(
         y_label (str, optional): Label for the y-axis. Defaults to None.
         measure_label (str, optional): Label for the measure. Defaults to "Measure".
         prediction_label (str, optional): Label for the prediction. Defaults to "Model".
+        image_path (Path, optional): Saving path to png image
+        font_size (Int, optional): Fontsize for all figure text. Default 12
     """
 
     lower_q, med, upper_q = _prepare_quantiles(
@@ -396,8 +401,14 @@ def compare_bars(
         label=prediction_label,
     )
     plt.bar(1, measure, label=measure_label)
-    plt.title(title)
-    plt.ylabel(y_label)
-    plt.xticks([0, 1], [prediction_label, measure_label])
+    plt.title(title, fontsize=font_size)  # Set font size for title
+    plt.ylabel(y_label, fontsize=font_size)  # Set font size for y-label
+    plt.xticks(
+        [0, 1], [prediction_label, measure_label], fontsize=font_size
+    )  # Set font size for x-ticks
+    plt.yticks(fontsize=font_size)  # Set font size for y-ticks
 
-    plt.show()
+    if image_path is not None:
+        plt.savefig(image_path, format="png", bbox_inches="tight")
+
+    return plt.gcf()
