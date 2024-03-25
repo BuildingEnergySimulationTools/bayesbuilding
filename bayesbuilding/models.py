@@ -124,3 +124,55 @@ def we_cst_wd_radiation_lighting(x, variable_dict):
     base_wd = variable_dict["base_wd"]
 
     return pm.math.switch(x[:, 0], base_we, base_wd + fs * x[:, 1])
+
+
+def season_cp_occ_cp_rad_heating_cooling_es(x, variables_dict: dict):
+    """
+    Add radiation to Season Occupation Change point Heating / Cooling Energy Signature
+    source S. Rouchier (https://buildingenergygeeks.org/bayesianmv.html)
+    Piecewise linear model to predict the overall building energy consumption.
+    Assume 3 distinct periods Heating, Cooling, mid-season:
+    n distinct functions for n occupation typology.
+
+    if tau_heat > t_ext :
+        heat = g_{heat} * (tau_{heat} - t_{ext})
+
+    if tau_cool < t_ext :
+        cool = g_{cool} * (t_{ext} - tau_{cool})
+
+    if tau_rad_h > rad:
+        solar_heat = fs_{heat} * (taurad_{heat} - rad)
+
+    if tau_rad_c < rad:
+        solar_cool = - fs_{heat} * (taurad_{cool} - rad)
+
+    E = base
+
+    :param x: The features . x[:, 0] must be a columns of boolean values, or integer
+    indicating the period (from 0, to n period), x[:, 1] must be external temperatures,
+    x[:, 2] is a measure of solar radiation. For exemple projected radiation or
+    Global Horizontal depending on the value and the meaning of fs
+    :param variables_dict: mandatory model variables are : "base", "g_h", "g_c",
+    "tau_h", "tau_c", "fs_h", "fs_c", "tau_rad_h", "tau_rad_c".
+    :return: Energy consumption
+    """
+    occupation = x[:, 0].astype(int)
+    t_ext = x[:, 1]
+    rad = x[:, 2]
+
+    base = variables_dict["base"]
+    g_h = variables_dict["g_h"]
+    g_c = variables_dict["g_c"]
+    tau_h = variables_dict["tau_h"]
+    tau_c = variables_dict["tau_c"]
+    fs_h = variables_dict["fs_h"]
+    fs_c = variables_dict["fs_c"]
+    tau_rad_h = variables_dict["tau_rad_h"]
+    tau_rad_c = variables_dict["tau_rad_c"]
+
+    baseline = base[occupation]
+    solar_heat = fs_h[occupation] * pm.math.maximum(tau_rad_h[occupation] - rad, 0)
+    solar_cool = -fs_c[occupation] * pm.math.maximum(rad - tau_rad_c[occupation], 0)
+    heat = g_h[occupation] * pm.math.maximum(tau_h[occupation] - t_ext, 0)
+    cool = g_c[occupation] * pm.math.maximum(t_ext - tau_c[occupation], 0)
+    return baseline + heat + cool + solar_cool + solar_heat
