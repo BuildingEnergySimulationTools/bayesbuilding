@@ -176,3 +176,19 @@ def season_cp_occ_cp_rad_heating_cooling_es(x, variables_dict: dict):
     heat = g_h[occupation] * pm.math.maximum(tau_h[occupation] - t_ext, 0)
     cool = g_c[occupation] * pm.math.maximum(t_ext - tau_c[occupation], 0)
     return baseline + heat + cool + solar_cool + solar_heat
+
+
+def ppv_projected_rad_cst_eff(x, variables_dict: dict):
+    """
+    Simplest model of pv panels. Constant efficiency.
+    Radiation are provided as kWh/m² and must already be projected in the plan
+    of the pannel
+    :param x: The features . x[:, 0] is the solar radiation in Wh/m² or kWh/m²
+    :param variables_dict: mandatory model variables are : "surface" and "efficiency"
+    :return:  surface * efficiency * radiations
+    """
+    rad = x[:, 0]
+    efficiency = variables_dict["efficiency"]
+    surface = variables_dict["surface"]
+
+    return surface * efficiency * rad
