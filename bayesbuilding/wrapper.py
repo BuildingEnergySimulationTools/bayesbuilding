@@ -117,6 +117,8 @@ class PymcWrapper:
         self.priors_dict = priors_dict
         self.features_names = None
         self.target_name = None
+        self.var_names = None
+        self.model = None
         self.sigma_change_point_idx = sigma_change_point_idx
         self.traces = {
             "prior": az.data.inference_data.InferenceData(),
@@ -238,9 +240,6 @@ class PymcWrapper:
                     shape=self._data_dict["x"].shape[0],
                 )
             self.var_names = list(self.priors_dict.keys())
-        else:
-            self.var_names = None
-            self.model = None
 
     def sample_prior(
         self,
