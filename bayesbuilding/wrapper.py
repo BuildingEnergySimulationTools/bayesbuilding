@@ -105,6 +105,9 @@ class PymcWrapper:
         If the loaded model function is not in bayesbuilding.model, it must
         be provided separately and the pymc model must be build using the build_model()
         method.
+    plot_dist_comparison(var_names):
+        Plot compare prior and posterior distributions of variables and observations
+        var_names arguments filter the values to display. default is self.var_names
     """
 
     def __init__(
@@ -356,3 +359,13 @@ class PymcWrapper:
             [score_function(y, sample) for sample in flattened_trace]
         )
         return {"mean_score": np.mean(scores_array), "sd_score": np.std(scores_array)}
+
+    def plot_dist_comparison(self, var_names: list[str] = None, plot_dist_kwargs=None):
+        if var_names is None:
+            var_names = self.var_names
+        if plot_dist_kwargs is None:
+            plot_dist_kwargs = {}
+        temp = az.data.inference_data.InferenceData()
+        temp.extend(self.traces["sampling"])
+        temp.extend(self.traces["prior"])
+        return az.plot_dist_comparison(temp, var_names=var_names, **plot_dist_kwargs)

@@ -97,6 +97,8 @@ class TestWrapper:
         # === test plots ===
         test_model.sample_posterior_predictive(data[["Text"]])
 
+        test_model.plot_dist_comparison()
+
         time_series_hdi(
             measure_ts=data["heating"],
             prediction=test_model.traces["posterior"].posterior_predictive[
