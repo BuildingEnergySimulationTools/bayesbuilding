@@ -2,7 +2,7 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
-import bayesbuilding
+import bayesbuilding.models as mods
 import warnings
 
 import arviz as az
@@ -193,7 +193,7 @@ class PymcWrapper:
 
         if self.model_function is not None:
             try:
-                self.model_function = getattr(bayesbuilding.models, self.model_function)
+                self.model_function = getattr(mods, self.model_function)
             except AttributeError:
                 warnings.warn(
                     f"Model function {self.model_function} not found in"
