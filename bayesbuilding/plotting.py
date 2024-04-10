@@ -8,7 +8,7 @@ from plotly.subplots import make_subplots
 from pathlib import Path
 
 
-def _prepare_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
+def get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
     if isinstance(prediction, xarray.core.dataarray.DataArray):
         prediction = np.array(prediction)
 
@@ -38,6 +38,8 @@ def time_series_hdi(
     upper_q=0.975,
     upper_cut=None,
     lower_cut=None,
+    image_path: Path = None,
+    figsize: tuple = (10, 6),
     backend: str = "plotly",
 ):
     """
@@ -61,9 +63,7 @@ def time_series_hdi(
     - None: The function displays the plot.
 
     """
-    pridiction_q = _prepare_quantiles(
-        prediction, lower_q, upper_q, lower_cut, upper_cut
-    )
+    pridiction_q = get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut)
     d_data = measure_ts.to_frame()
     d_data["pred_low"] = pridiction_q[0, :]
     d_data["pred_med"] = pridiction_q[1, :]
@@ -109,9 +109,10 @@ def time_series_hdi(
             )
         )
         fig.update_layout(title=title, xaxis_title="Time", yaxis_title=y_label)
-        fig.show()
+        return fig
+
     elif backend == "matplotlib":
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=figsize)
         plt.scatter(
             d_data.index,
             d_data.iloc[:, 0],
@@ -137,7 +138,9 @@ def time_series_hdi(
 
         plt.ylabel(y_label)
         plt.title(title)
-        plt.show()
+        if image_path is not None:
+            plt.savefig(image_path, format="png", bbox_inches="tight")
+        return plt.gcf()
 
     else:
         raise ValueError(
@@ -158,6 +161,7 @@ def changepoint_graph(
     title: str = None,
     upper_cut=None,
     lower_cut=None,
+    image_path: Path = None,
     backend: str = "plotly",
 ):
     """
@@ -194,9 +198,7 @@ def changepoint_graph(
     if changepoint_periods is None:
         changepoint_periods = np.zeros(x_variable.shape[0])
 
-    prediction_q = _prepare_quantiles(
-        prediction, lower_q, upper_q, lower_cut, upper_cut
-    )
+    prediction_q = get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut)
     d_data = pd.concat([x_variable, y_measure], axis=1)
     d_data["pred_low"] = prediction_q[0, :]
     d_data["pred_med"] = prediction_q[1, :]
@@ -254,7 +256,7 @@ def changepoint_graph(
                 )
             )
         fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label)
-        fig.show()
+        return fig
 
     elif backend == "matplotlib":
         plt.figure(figsize=(10, 6))
@@ -286,7 +288,9 @@ def changepoint_graph(
         plt.xlabel(x_label)
         plt.ylabel(y_label)
         plt.title(title)
-        plt.show()
+        if image_path is not None:
+            plt.savefig(image_path, format="png", bbox_inches="tight")
+        return plt.gcf()
 
     else:
         raise ValueError(
@@ -305,6 +309,7 @@ def time_series_bar_plot(
     bar_width=0.35,
     title: str = None,
     y_label: str = None,
+    image_path: Path = None,
 ):
     """
     Generate a time series bar plot comparing a measure against a prediction with
@@ -325,7 +330,7 @@ def time_series_bar_plot(
         y_label (str, optional): Label for the y-axis. Defaults to None.
     """
 
-    lower_q, med, upper_q = _prepare_quantiles(
+    lower_q, med, upper_q = get_quantiles(
         prediction, lower_q, upper_q, lower_cut, upper_cut
     )
 
@@ -349,7 +354,9 @@ def time_series_bar_plot(
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
     plt.tight_layout()
     plt.legend()
-    plt.show()
+    if image_path is not None:
+        plt.savefig(image_path, format="png", bbox_inches="tight")
+    return plt.gcf()
 
 
 def compare_bars(
@@ -388,7 +395,7 @@ def compare_bars(
         font_size (Int, optional): Fontsize for all figure text. Default 12
     """
 
-    lower_q, med, upper_q = _prepare_quantiles(
+    lower_q, med, upper_q = get_quantiles(
         prediction, lower_q, upper_q, lower_cut, upper_cut
     )
 

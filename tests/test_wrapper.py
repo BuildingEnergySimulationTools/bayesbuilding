@@ -107,6 +107,9 @@ class TestWrapper:
             title="Posterior model accuracy",
             y_label="Energy consumption [kWh]",
             backend="plotly",
+            image_path=Path(
+                r"C:\Users\bdurandestebe\Documents\49_BIM_GEM_E\cta_env\test.png"
+            ),
         )
         time_series_hdi(
             measure_ts=data["heating"],
