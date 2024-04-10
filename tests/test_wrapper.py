@@ -1,3 +1,5 @@
+import tempfile
+
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +9,8 @@ import pymc as pm
 from bayesbuilding.models import season_cp_heating_es
 from bayesbuilding.plotting import time_series_hdi, changepoint_graph
 from bayesbuilding.wrapper import PymcWrapper
+
+IMAGE_TEST_PATH = Path(tempfile.mkdtemp()) / "image.png"
 
 
 class TestWrapper:
@@ -107,9 +111,7 @@ class TestWrapper:
             title="Posterior model accuracy",
             y_label="Energy consumption [kWh]",
             backend="plotly",
-            image_path=Path(
-                r"C:\Users\bdurandestebe\Documents\49_BIM_GEM_E\cta_env\test.png"
-            ),
+            image_path=IMAGE_TEST_PATH,
         )
         time_series_hdi(
             measure_ts=data["heating"],

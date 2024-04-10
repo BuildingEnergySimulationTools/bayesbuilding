@@ -2,10 +2,13 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import plotly.graph_objs as go
 import xarray
 from plotly.subplots import make_subplots
 from pathlib import Path
+
+sns.set_style("whitegrid")
 
 
 def get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
