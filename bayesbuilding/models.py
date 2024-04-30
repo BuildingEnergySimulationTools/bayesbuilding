@@ -192,3 +192,41 @@ def ppv_projected_rad_cst_eff(x, variables_dict: dict):
     surface = variables_dict["surface"]
 
     return surface * efficiency * rad
+
+
+def ppv_noct_model(x, variables_dict: dict):
+    """Compute PV panel production
+
+    :param x: 2d array
+        - x[:, 0] : air_temperature [°C]
+        - x[:, 1] : GTI [W/m2] normal to the panel
+    :param variables_dict. Variables names are
+    - peak_power: float: Peak power [Wp]
+    - noct: float: Normal Operating Cell Temeprature [°C]
+    - power_temp_coeff: float (positif): Efficiency loss by temperature ratio [%/°K]
+    - inverter_eff: Inverter efficiency [-]
+
+    returns panel_power [W]
+    """
+
+    air_temp = x[:, 0]
+    rad = x[:, 1]
+
+    noct = variables_dict["noct"]
+    peak_power = variables_dict["peak_power"]
+    power_temp_coeff = variables_dict["power_temp_coeff"]
+    inverter_eff = variables_dict["inverter_eff"]
+
+    # fmt: off
+    panel_temp = (
+        air_temp
+        + rad * (noct - NOCT_AIR_TEMP) / NOCT_IRRADIANCE
+    )
+
+    panel_power = (
+        peak_power
+        * (1 - power_temp_coeff * (panel_temp - STC_AIR_TEMP))
+        * rad / STC_IRRADIANCE
+    )
+
+    return inverter_eff * panel_power
