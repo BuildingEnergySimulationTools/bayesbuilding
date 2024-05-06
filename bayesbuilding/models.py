@@ -1,5 +1,17 @@
 import pymc as pm
 
+# STC air temperature [°C]
+STC_AIR_TEMP = 25
+
+# STC irradiance [W/m2]
+STC_IRRADIANCE = 1000
+
+# NOCT air temperature [°C]
+NOCT_AIR_TEMP = 20
+
+# NOCT irradiance [W/m2]
+NOCT_IRRADIANCE = 800
+
 
 def occ_cp(x, variables_dict: dict):
     """
