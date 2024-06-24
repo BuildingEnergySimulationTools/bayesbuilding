@@ -1,74 +1,66 @@
 import pytensor
-import pytensor.tensor as pt
-from pytensor.graph import Apply, Op
 import pymc as pm
 import numpy as np
+import pandas as pd
 import arviz as az
 import matplotlib.pyplot as plt
+from corrai.fmu import ModelicaFmuModel
+from bayesbuilding.custom import ModelicaFMULogLike, RefLogLike
+from pathlib import Path
+
+# %%
+WORKDIR = Path(r"C:\Users\bdurandestebe\Documents\42_MBLABS\Bayesian_FMUs")
 
 
 # %%
 def my_model(variable_dict, x):
-    m = variable_dict["mtrue"]
-    c = variable_dict["ctrue"]
+    m = variable_dict["m.k"]
+    c = variable_dict["c.k"]
     return m * x + c
 
 
 # %%
-class LogLike(Op):
-    def __init__(self, model_function):
-        self.model_function = model_function
-        self.variables_keys = None
+my_model_fmu = ModelicaFmuModel(
+    WORKDIR / "lienear_fmu_combi_in_mo.fmu",
+    simulation_options={
+        "startTime": 0,
+        "stopTime": 9,
+        "stepSize": 1,
+        "solver": "CVode",
+        "outputInterval": 1,
+        "tolerance": 1e-6,
+        "fmi_type": "ModelExchange",
+    },
+    output_list=["add.y"],
+)
 
-    def make_node(self, *variables, x, data) -> Apply:
-        # Convert inputs to tensor variables
-        variable_list = [pt.as_tensor(val) for val in variables]
-        x = pt.as_tensor(x)
-        data = pt.as_tensor(data)
+# %%
+my_model_fmu.fmu_instance
+# %%
 
-        inputs = [*variable_list, x, data]
-        # Define output type, in our case a vector of likelihoods
-        # with the same dimensions and same data type as data
-        # If data must always be a vector, we could have hard-coded
-        # outputs = [pt.vector()]
-        outputs = [data.type()]
+my_model_fmu.model_description
 
-        # Apply is an object that combines inputs, outputs and an Op (self)
-        return Apply(self, inputs, outputs)
+# %%
+import cloudpickle
 
-    def perform(
-        self, node: Apply, inputs: list[np.ndarray], outputs: list[list[None]]
-    ) -> None:
-        # This is the method that compute numerical output
-        # given numerical inputs. Everything here is numpy arrays
-        variables = inputs[:-2]
-        x, data = inputs[-2:]  # this will contain my variables
+try:
+    # Attempt to pickle a specific object
+    cloudpickle.dumps(my_model_fmu)
+except ValueError as e:
+    print(f"Error pickling object: {e}")
 
-        # call our numpy log-likelihood function
-        loglike_eval = self._loglike(*variables, x=x, data=data)
+# %%
+my_model_fmu.simulate()
 
-        # Save the result in the outputs list provided by PyTensor
-        # There is one list per output, each containing another list
-        # pre-populated with a `None` where the result should be saved.
-        outputs[0][0] = np.asarray(loglike_eval)
+# %%
+df = pd.DataFrame(
+    {"x": [1.0, 2.0, 3.0, 4.0]},
+    index=pd.date_range("2020-01-01 00:00:00", freq="s", periods=4),
+)
 
-    def _loglike(self, *variable_list, x, data):
-        # We fail explicitly if inputs are not numerical types for the sake of this tutorial
-        # As defined, my_loglike would actually work fine with PyTensor variables!
-        for param in variable_list + (x, data):
-            if not isinstance(param, (float, np.ndarray)):
-                raise TypeError(f"Invalid input type to loglike: {type(param)}")
-        variable_dict = {
-            key: val for key, val in zip(self.variables_keys, variable_list)
-        }
-
-        model = self.model_function(variable_dict, x)
-        return (
-            -0.5 * ((data - model) / variable_dict["sigma"]) ** 2
-            - np.log(np.sqrt(2 * np.pi))
-            - np.log(variable_dict["sigma"])
-        )
-
+# df = pd.DataFrame(
+#     {"x": [1.0, 2.0, 3.0, 4.0]},
+# )
 
 # %%
 # set up our data
@@ -78,25 +70,31 @@ x = np.linspace(0.0, 9.0, N)
 mtrue = 0.4  # true gradient
 ctrue = 3.0  # true y-intercept
 
-variables_dict = {"mtrue": mtrue, "ctrue": ctrue, "sigma": 1.0}
+variables_dict = {"m.k": mtrue, "c.k": ctrue, "sigma": 1.0}
 
 truemodel = my_model(variables_dict, x)
 
+# %%
+# my_model_fmu.simulate(parameter_dict={"m.k": mtrue, "c.k": ctrue}, x=pd.DataFrame(x))
+
+# %%
+my_model_fmu.simulation_options
+# %%
 # make data
 rng = np.random.default_rng(716743)
 data = variables_dict["sigma"] * rng.normal(size=N) + truemodel
 
-# create our Op
-loglike_op = LogLike(my_model)
-test_out = loglike_op(*tuple(variables_dict.values()), x=x, data=data)
-
-pytensor.dprint(test_out, print_type=True)
-
-
 # %%
+# # create our Op
+loglike_op = ModelicaFMULogLike(my_model_fmu)
+# test_out = loglike_op(*tuple(variables_dict.values()), x=x, data=data)
+#
+# loglike_op = RefLogLike(my_model)
+# pytensor.dprint(test_out, print_type=True)
+
+
 def custom_dist_loglike(data, *dist_params):
     # data, or observed is always passed as the first input of CustomDist
-    print(dist_params)
     variables = dist_params[:-1]
     return loglike_op(*variables, x=dist_params[-1], data=data)
 
@@ -108,7 +106,7 @@ with pm.Model() as no_grad_model:
     variable_dict = {
         "mtrue": pm.Uniform("mtrue", lower=-10.0, upper=10.0, initval=mtrue),
         "ctrue": pm.Uniform("ctrue", lower=-10.0, upper=10.0, initval=ctrue),
-        "sigma": pm.Normal("sigma", mu=1.0, sigma=0.1, initval=1.0),
+        "sigma": pm.Normal("sigma", mu=1.0, sigma=0.05, initval=1.0),
     }
 
     loglike_op.variables_keys = variables_dict.keys()
@@ -121,22 +119,24 @@ with pm.Model() as no_grad_model:
     )
 
 # %%
-ip = no_grad_model.initial_point()
+# ip = no_grad_model.initial_point()
 
 # %%
-no_grad_model.compile_logp(vars=[likelihood], sum=False)(ip)
+# no_grad_model.compile_logp(vars=[likelihood], sum=False)(ip)
+
 
 # %%
-try:
-    no_grad_model.compile_dlogp()
-except Exception as exc:
-    print(type(exc))
+# with no_grad_model:
+#     prior = pm.sample_prior_predictive(100)
 
 # %%
 with no_grad_model:
     # Use custom number of draws to replace the HMC based defaults
-    idata_no_grad = pm.sample(3000, tune=1000)
+    idata_no_grad = pm.sample(draws=10, tune=5, random_seed=42, cores=1)
 
 # %%
 # plot the traces
 az.plot_trace(idata_no_grad, lines=[("m", {}, mtrue), ("c", {}, ctrue)])
+plt.show()
+
+# %%
