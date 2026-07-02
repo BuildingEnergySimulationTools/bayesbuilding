@@ -1,7 +1,10 @@
 pandas==2.2.0
 numpy==1.26.3
-pymc==5.10.3
-arviz==0.18.0
+pymc==5.20.0
+arviz==0.20.0
+xarray==2024.1.0
 matplotlib==3.7.5
 plotly==5.13.1
 seaborn==0.13.2
+h5netcdf==1.1.0
+h5py==3.10.0

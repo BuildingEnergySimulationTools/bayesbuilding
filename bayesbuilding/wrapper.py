@@ -76,7 +76,7 @@ class PymcWrapper:
     _observations : pm.Normal
         PyMC3 Normal distribution defining the model's likelihood.
     _data_dict : dict
-        Dictionary containing PyMC3 MutableData objects.
+        Dictionary containing PyMC Data objects.
     _variables_dict : dict
         Dictionary containing PyMC3 variables for the model parameters.
 
@@ -124,9 +124,9 @@ class PymcWrapper:
         self.model = None
         self.sigma_change_point_idx = sigma_change_point_idx
         self.traces = {
-            "prior": az.data.inference_data.InferenceData(),
-            "sampling": az.data.inference_data.InferenceData(),
-            "posterior": az.data.inference_data.InferenceData(),
+            "prior": az.InferenceData(),
+            "sampling": az.InferenceData(),
+            "posterior": az.InferenceData(),
         }
         self._x_train = None
         self._y_train = None
@@ -210,10 +210,10 @@ class PymcWrapper:
             with self.model:
                 # Set empty data objects
                 self._data_dict = {
-                    "x": pm.MutableData(
+                    "x": pm.Data(
                         name="x", value=np.array([[]]), dims=["date", "features"]
                     ),
-                    "y": pm.MutableData(name="y", value=np.array([]), dims=["target"]),
+                    "y": pm.Data(name="y", value=np.array([]), dims=["target"]),
                 }
 
                 # Set priors
@@ -259,7 +259,7 @@ class PymcWrapper:
                 self.features_names = list(x.columns)
 
             self.traces["prior"] = pm.sample_prior_predictive(
-                samples=samples, var_names=var_names, **sample_kwargs
+                draws=samples, var_names=var_names, **sample_kwargs
             )
 
     def sample(
@@ -365,7 +365,7 @@ class PymcWrapper:
             var_names = self.var_names
         if plot_dist_kwargs is None:
             plot_dist_kwargs = {}
-        temp = az.data.inference_data.InferenceData()
+        temp = az.InferenceData()
         temp.extend(self.traces["sampling"])
         temp.extend(self.traces["prior"])
         return az.plot_dist_comparison(temp, var_names=var_names, **plot_dist_kwargs)

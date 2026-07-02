@@ -12,7 +12,7 @@ sns.set_style("whitegrid")
 
 
 def get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
-    if isinstance(prediction, xarray.core.dataarray.DataArray):
+    if isinstance(prediction, xarray.DataArray):
         prediction = np.array(prediction)
 
     if prediction.ndim > 2:  # Assume it's because we have several chains
@@ -34,7 +34,7 @@ def get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
 
 def time_series_hdi(
     measure_ts: pd.Series,
-    prediction: np.ndarray | xarray.core.dataarray.DataArray,
+    prediction: np.ndarray | xarray.DataArray,
     y_label: str = None,
     title: str = None,
     lower_q=0.025,
@@ -304,7 +304,7 @@ def changepoint_graph(
 
 def time_series_bar_plot(
     measure: pd.Series,
-    prediction: np.ndarray | xarray.core.dataarray.DataArray,
+    prediction: np.ndarray | xarray.DataArray,
     lower_q=0.025,
     upper_q=0.975,
     upper_cut=None,
@@ -320,7 +320,7 @@ def time_series_bar_plot(
 
     Args:
         measure (pd.Series): The measured values as a Pandas Series.
-        prediction (np.ndarray or xarray.core.dataarray.DataArray):
+        prediction (np.ndarray or xarray.DataArray):
             The predicted values or data array.
         lower_q (float, optional): The lower quantile for the error bars.
         Defaults to 0.025.
@@ -364,7 +364,7 @@ def time_series_bar_plot(
 
 def compare_bars(
     measure: float,
-    prediction: np.ndarray | xarray.core.dataarray.DataArray,
+    prediction: np.ndarray | xarray.DataArray,
     lower_q: float = 0.025,
     upper_q: float = 0.975,
     upper_cut: int | float = None,
@@ -382,7 +382,7 @@ def compare_bars(
 
     Args:
         measure (float): The measured value to compare against the prediction.
-        prediction (np.ndarray or xarray.core.dataarray.DataArray):
+        prediction (np.ndarray or xarray.DataArray):
             The predicted values or data array.
         lower_q (float, optional): The lower quantile for the error bars.
         Defaults to 0.025.
