@@ -8,9 +8,27 @@ import pymc as pm
 
 from bayesbuilding.models import season_cp_heating_es
 from bayesbuilding.plotting import time_series_hdi, changepoint_graph
-from bayesbuilding.wrapper import PymcWrapper
+from bayesbuilding.wrapper import PymcWrapper, _resample_samples
 
 IMAGE_TEST_PATH = Path(tempfile.mkdtemp()) / "image.png"
+
+
+class TestResampleSamples:
+    def test_sums_samples_and_y_into_weekly_bins(self):
+        index = pd.date_range("2023-01-02", periods=14, freq="D")  # Mon -> 2 full weeks
+        flattened_trace = np.vstack(
+            [np.ones(14), 2 * np.ones(14)]
+        )  # 2 samples, constant per day
+        y = pd.Series(np.arange(1, 15, dtype=float), index=index)
+
+        resampled_trace, resampled_y = _resample_samples(
+            flattened_trace, y, resample_rule="W"
+        )
+
+        assert resampled_trace.shape == (2, 2)
+        np.testing.assert_allclose(resampled_trace[0], [7.0, 7.0])
+        np.testing.assert_allclose(resampled_trace[1], [14.0, 14.0])
+        np.testing.assert_allclose(resampled_y.to_numpy(), [28.0, 77.0])
 
 
 class TestWrapper:
@@ -95,6 +113,7 @@ class TestWrapper:
         # === test save / load ===
         test_model.save_model(Path(tmp_path))
 
+
         new_model = PymcWrapper()
         new_model.load_model(Path(tmp_path))
 
@@ -142,3 +161,47 @@ class TestWrapper:
             y_label="heating",
             title="test",
         )
+
+    def test_score_with_weekly_resample_rule(self):
+        index = pd.date_range("2023-01-02", periods=28, freq="D")  # Mon -> 4 weeks
+        data = pd.DataFrame({"Text": np.linspace(0, 20, 28)}, index=index)
+
+        true_g, true_base, true_tau, true_sigma = 50, 50, 14, 5
+        np.random.seed(0)
+        noise = true_sigma * np.random.randn(28)
+        data["heating"] = (
+            true_g * np.maximum(true_tau - data["Text"], 0) + true_base + noise
+        )
+
+        test_model = PymcWrapper(
+            model_function=season_cp_heating_es,
+            priors_dict={
+                "g": (pm.Normal, dict(name="g", mu=40, sigma=5)),
+                "tau": (pm.Normal, dict(name="tau", mu=12, sigma=1)),
+                "base": (pm.Normal, dict(name="base", mu=30, sigma=5)),
+                "sigma": (pm.Normal, dict(name="sigma", mu=12, sigma=1)),
+            },
+        )
+        test_model.sample(
+            x=data[["Text"]],
+            y=data["heating"],
+            draws=500,
+            tune=500,
+            chains=2,
+            sample_kwargs={"random_seed": 42},
+        )
+
+        score_daily = test_model.score(
+            x=data[["Text"]], y=data["heating"], sample_kwargs={"random_seed": 42}
+        )
+        score_weekly = test_model.score(
+            x=data[["Text"]],
+            y=data["heating"],
+            sample_kwargs={"random_seed": 42},
+            resample_rule="W",
+        )
+
+        assert set(score_daily) == {"mean_score", "sd_score"}
+        assert set(score_weekly) == {"mean_score", "sd_score"}
+        # Weekly aggregation averages out day-to-day noise -> tighter score spread.
+        assert score_weekly["sd_score"] < score_daily["sd_score"]
