@@ -11,12 +11,20 @@ from pathlib import Path
 sns.set_style("whitegrid")
 
 
-def get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
+def _flatten_chains(prediction):
+    """Convert an xarray DataArray to ndarray and flatten (chain, draw, time) into
+    (samples, time). No-op if `prediction` is already 2D."""
     if isinstance(prediction, xarray.DataArray):
         prediction = np.array(prediction)
 
     if prediction.ndim > 2:  # Assume it's because we have several chains
-        prediction = prediction.reshape((-1, prediction.shape[2]))
+        prediction = prediction.reshape((-1, prediction.shape[-1]))
+
+    return prediction
+
+
+def get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
+    prediction = _flatten_chains(prediction)
 
     prediction_q = np.quantile(
         prediction,
@@ -30,6 +38,32 @@ def get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
         prediction_q[prediction_q < upper_cut] = upper_cut
 
     return prediction_q
+
+
+def get_cumulative_quantiles(prediction, lower_q=0.025, upper_q=0.975):
+    """
+    Quantiles of the cumulative sum of posterior predictive sample paths.
+
+    Unlike get_quantiles (quantiles of each per-timestep marginal independently),
+    this cumsum's each sample's full time path first, then takes quantiles across
+    samples. This preserves the within-draw correlation across time induced by
+    shared parameter values (e.g. a high-`g` draw stays high for every day), which
+    a per-timestep sigma*sqrt(n) propagation cannot capture. No parametric
+    autocorrelation assumption or inflation constant is needed.
+
+    Parameters:
+    - prediction (np.ndarray | xarray.DataArray): predictions, shape (samples, time)
+      or (chain, draw, time).
+    - lower_q (float): lower cumulative quantile (default 0.025).
+    - upper_q (float): upper cumulative quantile (default 0.975).
+
+    Returns:
+    - np.ndarray of shape (3, time): stacked [lower, median, upper] cumulative
+      quantiles, matching get_quantiles's output convention.
+    """
+    samples = _flatten_chains(prediction)
+    cum_samples = np.cumsum(samples, axis=1)
+    return np.quantile(cum_samples, q=[lower_q, 0.5, upper_q], axis=0)
 
 
 def time_series_hdi(
@@ -141,6 +175,171 @@ def time_series_hdi(
 
         plt.ylabel(y_label)
         plt.title(title)
+        if image_path is not None:
+            plt.savefig(image_path, format="png", bbox_inches="tight")
+        return plt.gcf()
+
+    else:
+        raise ValueError(
+            f"{backend} is an invalid backend argument, choose one of"
+            f"'plotly' or 'matplotlib"
+        )
+
+
+def plot_cumulative_energy_hdi(
+    measure_ts: pd.Series,
+    prediction: np.ndarray | xarray.DataArray,
+    y_label: str = None,
+    title: str = None,
+    lower_q=0.025,
+    upper_q=0.975,
+    image_path: Path = None,
+    figsize: tuple = (10, 6),
+    backend: str = "plotly",
+):
+    """
+    Visualise cumulative measured energy against the cumulative posterior predictive
+    distribution. Each posterior predictive sample path is cumsum'd over time before
+    quantiles are taken across samples (see get_cumulative_quantiles), so the band
+    reflects the actual correlation structure of the fitted model instead of a
+    parametric sigma*sqrt(n) (or hand-tuned autocorrelation-inflated) approximation.
+
+    Parameters:
+    - measure_ts (pd.Series): The observed time series data.
+    - prediction (np.ndarray | xarray.DataArray): Posterior predictive samples,
+      potentially from multiple chains.
+    - y_label (str): Label for the y-axis of the plot.
+    - title (str): Title for the plot.
+    - lower_q (float): Lower cumulative quantile (default is 0.025).
+    - upper_q (float): Upper cumulative quantile (default is 0.975).
+    - backend (str): switch between a matplotlib or a plotly render
+
+    Returns:
+    - The rendered figure.
+    """
+    prediction_cq = get_cumulative_quantiles(prediction, lower_q, upper_q)
+
+    d_data = measure_ts.cumsum().to_frame(name="measure_cum")
+    d_data["pred_low"] = prediction_cq[0, :]
+    d_data["pred_med"] = prediction_cq[1, :]
+    d_data["pred_up"] = prediction_cq[2, :]
+
+    final_gap = d_data["pred_med"].iloc[-1] - d_data["measure_cum"].iloc[-1]
+    final_half_width = (d_data["pred_up"].iloc[-1] - d_data["pred_low"].iloc[-1]) / 2
+    coverage = (
+        (d_data["measure_cum"] >= d_data["pred_low"])
+        & (d_data["measure_cum"] <= d_data["pred_up"])
+    ).mean() * 100
+
+    daily_median = np.median(_flatten_chains(prediction), axis=0)
+    nmbe_percent = (
+        100 * (daily_median - measure_ts.values).sum() / measure_ts.values.sum()
+    )
+
+    if backend == "plotly":
+        fig = make_subplots()
+        fig.add_trace(
+            go.Scatter(
+                x=d_data.index,
+                y=d_data["pred_up"],
+                mode="lines",
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=d_data.index,
+                y=d_data["pred_low"],
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                name=f"Predicted [{lower_q}, {upper_q}]",
+                hoverinfo="skip",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=d_data.index,
+                y=d_data["pred_med"],
+                mode="lines",
+                name="Predicted cumulative median",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=d_data.index,
+                y=d_data["measure_cum"],
+                mode="lines",
+                name="Measured cumulative",
+            )
+        )
+        fig.add_annotation(
+            x=0.02,
+            y=0.98,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            align="left",
+            text=(
+                f"Final gap = {final_gap:.0f}<br>"
+                f"NMBE = {nmbe_percent:.1f}%<br>"
+                f"Final band half-width = {final_half_width:.0f}<br>"
+                f"Coverage = {coverage:.1f}%"
+            ),
+        )
+        fig.update_layout(
+            title=title,
+            xaxis_title="Time",
+            yaxis_title=y_label,
+            hovermode="x unified",
+        )
+        return fig
+
+    elif backend == "matplotlib":
+        plt.figure(figsize=figsize)
+        plt.plot(
+            d_data.index,
+            d_data["measure_cum"],
+            color="green",
+            label="Measured cumulative",
+        )
+        plt.plot(
+            d_data.index,
+            d_data["pred_med"],
+            color="orange",
+            label="Predicted cumulative median",
+        )
+        plt.fill_between(
+            d_data.index,
+            d_data["pred_low"],
+            d_data["pred_up"],
+            color="orange",
+            alpha=0.1,
+            label=f"Predicted [{lower_q}, {upper_q}]",
+        )
+
+        text = (
+            f"Final gap = {final_gap:.0f}\n"
+            f"NMBE = {nmbe_percent:.1f}%\n"
+            f"Final band half-width = {final_half_width:.0f}\n"
+            f"Coverage = {coverage:.1f}%"
+        )
+        plt.gca().text(
+            0.02,
+            0.98,
+            text,
+            transform=plt.gca().transAxes,
+            va="top",
+            ha="left",
+            fontsize=9,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+        )
+
+        plt.ylabel(y_label)
+        plt.title(title)
+        plt.legend()
         if image_path is not None:
             plt.savefig(image_path, format="png", bbox_inches="tight")
         return plt.gcf()
