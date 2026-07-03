@@ -9,12 +9,30 @@ import arviz as az
 import numpy as np
 import pandas as pd
 import pymc as pm
+from xarray import DataTree
 
 
 def r2_score(y_true, y_pred):
     numerator = ((y_true - y_pred) ** 2).sum(axis=0)
     denominator = ((y_true - np.average(y_true, axis=0)) ** 2).sum(axis=0)
     return 1 - numerator / denominator
+
+
+def _resample_samples(flattened_trace: np.ndarray, y: pd.Series, resample_rule: str):
+    """Sum each (samples, time) posterior predictive sample path, and `y`, into
+    `resample_rule` bins (e.g. "W"). Aggregation happens on daily sample paths
+    rather than on the driving variable before re-evaluating the model, since a
+    nonlinear forward model (e.g. a change-point's max(driving_var - tau, 0)) isn't
+    equivalent under the two orderings."""
+    resampled_trace = (
+        pd.DataFrame(flattened_trace.T, index=y.index)
+        .resample(resample_rule)
+        .sum()
+        .to_numpy()
+        .T
+    )
+    resampled_y = y.resample(resample_rule).sum()
+    return resampled_trace, resampled_y
 
 
 def custom_serializer(obj):
@@ -347,13 +365,25 @@ class PymcWrapper:
         y: pd.Series,
         score_function: Callable = r2_score,
         sample_kwargs: dict = None,
+        resample_rule: str = None,
     ):
+        """Score a fitted model's out-of-sample posterior predictive against `y`.
+
+        If `resample_rule` is given (e.g. "W"), each posterior predictive daily
+        sample path and `y` are summed into that resolution's bins before scoring,
+        instead of resampling `x` and re-evaluating the model -- the forward model
+        may be nonlinear in the driving variable (e.g. a change-point's
+        max(driving_var - tau, 0)), so the two are not equivalent.
+        """
         if sample_kwargs is None:
             sample_kwargs = {}
 
         self.sample_posterior_predictive(x=x, sample_kwargs=sample_kwargs)
         post_trace = self.traces["posterior"].posterior_predictive["observations"]
         flattened_trace = np.array(post_trace).reshape(-1, post_trace.shape[-1])
+
+        if resample_rule is not None:
+            flattened_trace, y = _resample_samples(flattened_trace, y, resample_rule)
 
         scores_array = np.array(
             [score_function(y, sample) for sample in flattened_trace]
@@ -365,7 +395,7 @@ class PymcWrapper:
             var_names = self.var_names
         if plot_dist_kwargs is None:
             plot_dist_kwargs = {}
-        temp = az.InferenceData()
-        temp.extend(self.traces["sampling"])
-        temp.extend(self.traces["prior"])
-        return az.plot_dist_comparison(temp, var_names=var_names, **plot_dist_kwargs)
+        temp = DataTree()
+        temp["posterior"] = self.traces["sampling"]["posterior"]
+        temp["prior"] = self.traces["prior"]["prior"]
+        return az.plot_prior_posterior(temp, var_names=var_names, **plot_dist_kwargs)
