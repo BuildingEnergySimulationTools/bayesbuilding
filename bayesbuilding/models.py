@@ -89,6 +89,31 @@ def season_cp_heating_es(x, variable_dict):
     return consumption + baseline
 
 
+def season_cp_heating_es_dt(x, variable_dict):
+    """
+    Seasonal Change Point Heating Energy Signature (dt driven)
+
+    The overall building energy consumption is modeled as a linear function
+    of dt (indoor/outdoor temperature difference, tin - text). Below the
+    changepoint tau, free heat gains (occupancy, equipment, solar) cover the
+    envelope losses and the heating term is 0. Above tau, the heating term
+    grows linearly with the excess (dt - tau), scaled by the overall heat
+    loss coefficient g [kWh/°C]. baseline is the "process" energy
+    consumption, added regardless of dt.
+
+    :param x: single column 2D array. x[:, 0] is dt (tin - text)
+    :param variable_dict: mandatory model variables are : "g", "tau", "base"
+    :return: overall building consumption
+    """
+    dt = x[:, 0]
+    g = variable_dict["g"]
+    tau = variable_dict["tau"]
+    baseline = variable_dict["base"]
+
+    consumption = g * pm.math.maximum(dt - tau, 0)
+    return consumption + baseline
+
+
 def season_cp_occ_cp_heating_es(x, variable_dict):
     """
     Seasonal Change Point Heating Energy Signature
