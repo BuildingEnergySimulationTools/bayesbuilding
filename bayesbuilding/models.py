@@ -89,6 +89,35 @@ def season_cp_heating_es(x, variable_dict):
     return consumption + baseline
 
 
+def heating_es_dju(x, variable_dict):
+    """
+    Linear heating energy signature driven by degree-days (DJU).
+
+    The overall building energy consumption is modeled as a linear function
+    of the heating degree-days (DJU). The consumption is given by:
+
+        consumption = base + g * dju
+
+    where:
+      - g is the slope (energy per unit of DJU),
+      - base is the constant baseline (non-weather-dependent) energy
+        consumption.
+
+    :param x: 2D array with a single feature column.
+        x[:, 0] contains the heating degree-days (DJU).
+    :param variable_dict: Dictionary containing the model parameters:
+        - "g": slope of the energy signature [energy/DJU]
+        - "base": baseline energy consumption [energy]
+    :return: Overall building energy consumption.
+    """
+    dju = x[:, 0]
+    g = variable_dict["g"]
+    baseline = variable_dict["base"]
+
+    consumption = g * dju
+    return consumption + baseline
+
+
 def season_cp_heating_es_dt(x, variable_dict):
     """
     Seasonal Change Point Heating Energy Signature (dt driven)
