@@ -115,6 +115,11 @@ def time_series_hdi(
                 mode="markers",
                 name="Observed",
                 marker=dict(color="green", size=10),
+                hovertemplate=(
+                    "Date: %{x|%Y-%m-%d %H:%M}<br>"
+                    + (y_label or "Value")
+                    + ": %{y}<extra></extra>"
+                ),
             )
         )
         fig.add_trace(
@@ -273,6 +278,11 @@ def plot_cumulative_energy_hdi(
                 y=d_data["measure_cum"],
                 mode="lines",
                 name="Measured cumulative",
+                hovertemplate=(
+                    "Date: %{x|%Y-%m-%d %H:%M}<br>"
+                    + (y_label or "Measured cumulative")
+                    + ": %{y}<extra></extra>"
+                ),
             )
         )
         fig.add_annotation(
@@ -418,6 +428,16 @@ def changepoint_graph(
 
     if backend == "plotly":
         fig = make_subplots()
+        if isinstance(d_data.index, pd.DatetimeIndex):
+            observed_hovertemplate = (
+                (x_label or x_name) + ": %{x}<br>"
+                + (y_label or y_name) + ": %{y}<br>"
+                "Date: %{customdata}<extra></extra>"
+            )
+            observed_customdata = d_data.index.strftime("%Y-%m-%d %H:%M")
+        else:
+            observed_hovertemplate = None
+            observed_customdata = None
         fig.add_trace(
             go.Scatter(
                 x=d_data[x_name],
@@ -425,6 +445,8 @@ def changepoint_graph(
                 mode="markers",
                 marker=dict(color=changepoint_periods, colorscale="Bluered", size=10),
                 name="Observed",
+                hovertemplate=observed_hovertemplate,
+                customdata=observed_customdata,
             )
         )
         for mask, color in zip(mask_list, color_list):
