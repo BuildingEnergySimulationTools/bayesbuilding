@@ -576,24 +576,42 @@ def season_cp_occ_cp_rad_heating_cooling_es(x, variables_dict: dict):
     cool = g_c[occupation] * pm.math.maximum(t_ext - tau_c[occupation], 0)
     return baseline + heat + cool + solar_cool + solar_heat
 
+
 def heating_cp_occ_rad(x, variables_dict: dict):
     """
-    comment
+    Heating changepoint (tau - t_ext) net of solar gains (fs * rad), floored at
+    zero, plus a per-occupation baseline. Solar gains are subtracted inside the
+    max() so a large summer radiation surplus cannot make the term negative and
+    eat into the baseline.
+
+    The likelihood scale is heteroscedastic and computed by the model itself:
+    sigma = s0 + alpha * heat, a noise floor (s0) plus a term proportional to
+    the heating load, instead of a single sigma shared regardless of how much
+    the building was actually heating that day. "sigma" is a reserved key in
+    the returned extras dict: PymcWrapper.build_model uses it in place of
+    variables_dict["sigma"] whenever a model_function provides it (see its
+    docstring).
+
+    Returns (mu, extras) with extras = {"sigma": ...}.
     """
     t_ext = x[:, 0]
     rad = x[:, 1]
     occupation = x[:, 2].astype(int)
 
-
     base = variables_dict["base"]
     g = variables_dict["g"]
     tau = variables_dict["tau"]
     fs = variables_dict["fs"]
+    s0 = variables_dict["s0"]
+    alpha = variables_dict["alpha"]
 
     baseline = base[occupation]
-    heat_minus_solar = g[occupation] * (tau[occupation] - t_ext) - fs[occupation] * rad
+    heat = pm.math.maximum(
+        g[occupation] * (tau[occupation] - t_ext) - fs[occupation] * rad, 0
+    )
 
-    return baseline + pm.math.maximum(heat_minus_solar, 0)
+    return baseline + heat, {"sigma": s0 + alpha * heat}
+
 
 def ppv_projected_rad_cst_eff(x, variables_dict: dict):
     """

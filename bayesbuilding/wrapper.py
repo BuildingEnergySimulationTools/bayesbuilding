@@ -67,16 +67,30 @@ class PymcWrapper:
         the function's scope.
         'variable_dict' is a dictionary where keys are variable names and values
         are PyMC variables.
+        It must return either a single tensor (the model's mean output, used
+        directly as 'mu'), or a tuple ``(mu, extras)`` where ``extras`` is a
+        dict[str, tensor] of named internal quantities to expose as extra
+        `pm.Deterministic`s (e.g. an internal 'heat' term, useful for
+        diagnostics). ``"sigma"`` is a reserved key in ``extras``: if present,
+        it is used as the likelihood standard deviation in place of
+        `variables_dict["sigma"]` -- this is how a model defines its own
+        (possibly heteroscedastic) noise, computed from quantities only the
+        model itself has access to (e.g. `sigma = s0 + alpha * heat`, see
+        `bayesbuilding.models.heating_cp_occ_rad`). In that case `priors_dict`
+        need not include a 'sigma' entry -- instead it should include whatever
+        priors the model's own sigma expression needs (e.g. 's0', 'alpha').
     priors_dict : dict[str:(Callable, dict)]
         A dictionary containing prior distributions for model parameters.
         Keys are parameter names, and values are tuples where the first element is
         a PyMC callable defining the prior distribution, and the second element is
         a dictionary of parameters for the prior distribution.
-        The dictionary must include a variable called 'sigma', representing the
-        likelihood standard deviation.
+        Unless `model_function` provides its own 'sigma' via `extras` (see
+        above), the dictionary must include a variable called 'sigma',
+        representing the likelihood standard deviation.
     sigma_change_point_idx : int, optional
         Index of 'x' in the 2nd dimension (feature axis) indicating the change point
-        for sigma in change point models.
+        for sigma in change point models. Ignored when `model_function` provides its
+        own 'sigma' via `extras`.
 
     Attributes:
     -----------
@@ -151,6 +165,7 @@ class PymcWrapper:
         self._observations = None
         self._data_dict = None
         self._variables_dict = None
+        self._extras_dict = None
 
         self.build_model()
 
@@ -239,19 +254,38 @@ class PymcWrapper:
                     name: val[0](**val[1]) for name, val in self.priors_dict.items()
                 }
 
-                mu = pm.Deterministic(
-                    name="mu",
-                    var=self.model_function(self._data_dict["x"], self._variables_dict),
+                model_output = self.model_function(
+                    self._data_dict["x"], self._variables_dict
                 )
+                if isinstance(model_output, tuple):
+                    mu_expr, extras = model_output
+                else:
+                    mu_expr, extras = model_output, {}
+
+                mu = pm.Deterministic(name="mu", var=mu_expr)
+
+                # "sigma" is a reserved extras key: a model_function that computes
+                # its own (possibly heteroscedastic) noise term returns it there,
+                # in place of the plain variables_dict["sigma"] / sigma_change_point_idx
+                # mechanism below (see class docstring, and e.g.
+                # bayesbuilding.models.heating_cp_occ_rad).
+                sigma_expr = extras.pop("sigma", None)
+                self._extras_dict = {
+                    name: pm.Deterministic(name=name, var=expr)
+                    for name, expr in extras.items()
+                }
 
                 # Combine into likelihood function
-                sigma = (
-                    self._variables_dict["sigma"][
-                        self._data_dict["x"][:, self.sigma_change_point_idx].astype(int)
-                    ]
-                    if self.sigma_change_point_idx is not None
-                    else self._variables_dict["sigma"]
-                )
+                if sigma_expr is not None:
+                    sigma = pm.Deterministic(name="sigma", var=sigma_expr)
+                else:
+                    sigma = (
+                        self._variables_dict["sigma"][
+                            self._data_dict["x"][:, self.sigma_change_point_idx].astype(int)
+                        ]
+                        if self.sigma_change_point_idx is not None
+                        else self._variables_dict["sigma"]
+                    )
 
                 self._observations = pm.Normal(
                     name="observations",
