@@ -942,6 +942,11 @@ def changepoint_graph(
     d_data["pred_low"] = prediction_q[0, :]
     d_data["pred_med"] = prediction_q[1, :]
     d_data["pred_up"] = prediction_q[2, :]
+    # Carried as a d_data column (rather than kept as the separate
+    # changepoint_periods array/Series) so it travels with the rows through the
+    # sort_values below -- using the original array positionally after the sort
+    # would silently pair each point with the wrong period/color.
+    d_data["cp_period"] = changepoint_periods
 
     x_name = x_variable.name
     y_name = y_measure.name
@@ -950,8 +955,8 @@ def changepoint_graph(
 
     color_list = ["blue", "red", "orange", "green"]
     mask_list = []
-    for period in set(changepoint_periods):
-        mask_list.append(changepoint_periods == period)
+    for period in sorted(set(changepoint_periods)):
+        mask_list.append(d_data["cp_period"] == period)
 
     if backend == "plotly":
         fig = make_subplots()
@@ -970,7 +975,7 @@ def changepoint_graph(
                 x=d_data[x_name],
                 y=d_data[y_name],
                 mode="markers",
-                marker=dict(color=changepoint_periods, colorscale="Bluered", size=10),
+                marker=dict(color=d_data["cp_period"], colorscale="Bluered", size=10),
                 name="Observed",
                 hovertemplate=observed_hovertemplate,
                 customdata=observed_customdata,
@@ -1014,7 +1019,7 @@ def changepoint_graph(
         plt.scatter(
             d_data[x_name],
             d_data[y_name],
-            c=changepoint_periods,
+            c=d_data["cp_period"],
             cmap="coolwarm",
             label="Observed",
             alpha=0.5,
