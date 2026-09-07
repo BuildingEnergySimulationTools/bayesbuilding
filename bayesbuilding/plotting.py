@@ -66,6 +66,29 @@ def get_cumulative_quantiles(prediction, lower_q=0.025, upper_q=0.975):
     return np.quantile(cum_samples, q=[lower_q, 0.5, upper_q], axis=0)
 
 
+def get_total_stats(prediction, lower_q=0.025, upper_q=0.975):
+    """
+    Mean and [lower_q, upper_q] quantiles of the per-draw PERIOD TOTAL (sum over
+    time) of posterior predictive sample paths. Same correlation-preserving
+    approach as get_cumulative_quantiles (sum each draw's full path first, then
+    summarize across draws) but collapsed to one scalar per draw.
+
+    Parameters:
+    - prediction (np.ndarray | xarray.DataArray): predictions, shape (samples, time)
+      or (chain, draw, time).
+    - lower_q (float): lower quantile (default 0.025).
+    - upper_q (float): upper quantile (default 0.975).
+
+    Returns:
+    - dict with keys "mean", "lower", "upper" (floats): mean period total and its
+      [lower_q, upper_q] quantile bounds.
+    """
+    samples = _flatten_chains(prediction)
+    totals = samples.sum(axis=1)
+    lower, upper = np.quantile(totals, [lower_q, upper_q])
+    return {"mean": float(totals.mean()), "lower": float(lower), "upper": float(upper)}
+
+
 def time_series_hdi(
     measure_ts: pd.Series,
     prediction: np.ndarray | xarray.DataArray,
