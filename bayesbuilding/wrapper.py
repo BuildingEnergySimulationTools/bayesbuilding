@@ -432,4 +432,4 @@ class PymcWrapper:
         temp = DataTree()
         temp["posterior"] = self.traces["sampling"]["posterior"]
         temp["prior"] = self.traces["prior"]["prior"]
-        return az.plot_prior_posterior(temp, var_names=var_names, **plot_dist_kwargs)
+        return az.plot_dist_comparison(temp, var_names=var_names, **plot_dist_kwargs)
