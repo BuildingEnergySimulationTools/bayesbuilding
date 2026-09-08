@@ -1,4 +1,5 @@
 import pymc as pm
+import pytensor.tensor as pt
 
 # STC air temperature [°C]
 STC_AIR_TEMP = 25
@@ -585,12 +586,14 @@ def heating_cp_occ_rad(x, variables_dict: dict):
     eat into the baseline.
 
     The likelihood scale is heteroscedastic and computed by the model itself:
-    sigma = s0 + alpha * heat, a noise floor (s0) plus a term proportional to
-    the heating load, instead of a single sigma shared regardless of how much
-    the building was actually heating that day. "sigma" is a reserved key in
-    the returned extras dict: PymcWrapper.build_model uses it in place of
-    variables_dict["sigma"] whenever a model_function provides it (see its
-    docstring).
+    sigma = sqrt(s0**2 + (s1 * w)**2), a noise floor (s0) combined in
+    quadrature with a term (s1) scaled by w, a sigmoid of (tau - t_ext) that
+    ramps from 0 to 1 as it gets colder than the changepoint -- i.e. extra
+    noise kicks in smoothly once heating is actually active, instead of a
+    single sigma shared regardless of how much the building was heating that
+    day. "sigma" is a reserved key in the returned extras dict:
+    PymcWrapper.build_model uses it in place of variables_dict["sigma"]
+    whenever a model_function provides it (see its docstring).
 
     Returns (mu, extras) with extras = {"sigma": ...}.
     """
@@ -603,14 +606,20 @@ def heating_cp_occ_rad(x, variables_dict: dict):
     tau = variables_dict["tau"]
     fs = variables_dict["fs"]
     s0 = variables_dict["s0"]
-    alpha = variables_dict["alpha"]
+    s1 = variables_dict["s1"]
 
     baseline = base[occupation]
     heat = pm.math.maximum(
         g[occupation] * (tau[occupation] - t_ext) - fs[occupation] * rad, 0
     )
 
-    return baseline + heat, {"sigma": s0 + alpha * heat}
+    mu = baseline + heat
+
+    w = pm.math.sigmoid((tau[occupation] - t_ext) / 1.5)
+
+    sigma = pt.sqrt(s0**2 + (s1 * w) ** 2)
+
+    return baseline + heat, {"sigma": sigma}
 
 
 def ppv_projected_rad_cst_eff(x, variables_dict: dict):
