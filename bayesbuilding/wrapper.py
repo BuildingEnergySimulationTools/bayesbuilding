@@ -363,6 +363,14 @@ class PymcWrapper:
                 **sample_kwargs,
             )
 
+    # Maps a self.traces key to the arviz-internal group name it actually
+    # holds the samples under (see sample_prior/sample/sample_posterior_predictive).
+    _TRACE_TO_ARVIZ_GROUP = {
+        "prior": "prior",
+        "sampling": "posterior",
+        "posterior": "posterior_predictive",
+    }
+
     def get_summary(
         self, group: str = None, var_names=None, filter_vars=None, summary_kwargs=None
     ):
@@ -370,14 +378,17 @@ class PymcWrapper:
             raise ValueError(
                 f"Unknown group {group} choose one of {self.traces.keys()}"
             )
-        if summary_kwargs is None:
-            summary_kwargs = {}
+        # round_to="none" keeps the returned columns numeric (arviz's default
+        # "auto" rounding formats them as display strings instead), overridable
+        # via summary_kwargs.
+        merged_summary_kwargs = {"round_to": "none", **(summary_kwargs or {})}
 
         return az.summary(
             data=self.traces[group],
             var_names=var_names,
             filter_vars=filter_vars,
-            **summary_kwargs,
+            group=self._TRACE_TO_ARVIZ_GROUP[group],
+            **merged_summary_kwargs,
         )
 
     def get_loo_score(self, loo_kwargs=None):
@@ -432,4 +443,4 @@ class PymcWrapper:
         temp = DataTree()
         temp["posterior"] = self.traces["sampling"]["posterior"]
         temp["prior"] = self.traces["prior"]["prior"]
-        return az.plot_dist_comparison(temp, var_names=var_names, **plot_dist_kwargs)
+        return az.plot_prior_posterior(temp, var_names=var_names, **plot_dist_kwargs)
