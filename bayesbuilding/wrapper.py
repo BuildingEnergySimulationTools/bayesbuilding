@@ -50,13 +50,12 @@ class PymcWrapper:
      framework:
     - Features are provided as pandas DataFrames.
     - Only a single target variable, provided as a pandas Series, is allowed.
-    - The model is defined by a model function, which returns deterministic outputs.
-    - The likelihood function is a Normal distribution, with the mean given by the
-        output of the model function and the standard deviation (sigma) being
-        a variable.
-    - For change point models, sigma may have multiple dimensions.
-    - The likelihood function is used for prediction, with the variable
-        named "observations".
+    - The model is defined by a model function, which returns the mean ('mu') of
+        the likelihood, plus, explicitly, every other parameter the chosen
+        likelihood distribution needs (e.g. 'sigma').
+    - The likelihood distribution is configurable (`likelihood`), defaulting to
+        Normal. The likelihood function is used for prediction, with the
+        variable named "observations".
 
     Parameters:
     -----------
@@ -67,30 +66,38 @@ class PymcWrapper:
         the function's scope.
         'variable_dict' is a dictionary where keys are variable names and values
         are PyMC variables.
-        It must return either a single tensor (the model's mean output, used
-        directly as 'mu'), or a tuple ``(mu, extras)`` where ``extras`` is a
-        dict[str, tensor] of named internal quantities to expose as extra
-        `pm.Deterministic`s (e.g. an internal 'heat' term, useful for
-        diagnostics). ``"sigma"`` is a reserved key in ``extras``: if present,
-        it is used as the likelihood standard deviation in place of
-        `variables_dict["sigma"]` -- this is how a model defines its own
-        (possibly heteroscedastic) noise, computed from quantities only the
-        model itself has access to (e.g. `sigma = s0 + alpha * heat`, see
-        `bayesbuilding.models.heating_cp_occ_rad`). In that case `priors_dict`
-        need not include a 'sigma' entry -- instead it should include whatever
-        priors the model's own sigma expression needs (e.g. 's0', 'alpha').
+        It must return a tuple ``(mu, extras)``: ``mu`` is the model's mean
+        output, and ``extras`` is a dict[str, tensor] that must contain, under
+        its own name, every parameter listed in `likelihood_params` (e.g.
+        ``{"sigma": ...}``) -- there is no implicit fallback to `variables_dict`
+        for these: `model_function` must build and return them explicitly, even
+        when that's just ``variables_dict["sigma"]`` unchanged. This is also
+        where a model computes its own (possibly heteroscedastic or per-category)
+        noise term, from quantities only the model itself has access to (e.g.
+        `sigma = s0 + alpha * heat`, or `sigma = variables_dict["sigma"][state]`
+        for a change-point-indexed sigma -- see
+        `bayesbuilding.models.heating_cp_occ_rad`). ``extras`` may also contain
+        further named quantities not required by `likelihood_params`, exposed as
+        extra `pm.Deterministic`s for diagnostics (e.g. an internal 'heat' term).
+        A bare tensor return (no tuple) is only valid when `likelihood_params`
+        is empty.
     priors_dict : dict[str:(Callable, dict)]
         A dictionary containing prior distributions for model parameters.
         Keys are parameter names, and values are tuples where the first element is
         a PyMC callable defining the prior distribution, and the second element is
         a dictionary of parameters for the prior distribution.
-        Unless `model_function` provides its own 'sigma' via `extras` (see
-        above), the dictionary must include a variable called 'sigma',
-        representing the likelihood standard deviation.
-    sigma_change_point_idx : int, optional
-        Index of 'x' in the 2nd dimension (feature axis) indicating the change point
-        for sigma in change point models. Ignored when `model_function` provides its
-        own 'sigma' via `extras`.
+        These are only the raw materials `model_function` has available in
+        `variables_dict`; they are never looked up by the wrapper itself to
+        build the likelihood -- `model_function` decides explicitly what feeds
+        `mu` and each of `likelihood_params` (see above).
+    likelihood : Callable, default pm.Normal
+        The PyMC distribution class used to build the "observations" likelihood.
+        Must accept a `mu` kwarg, plus whatever names are listed in
+        `likelihood_params`.
+    likelihood_params : list[str], optional
+        Names of the likelihood's kwargs, beyond `mu`, that `model_function`
+        must return in its `extras` dict (e.g. `["sigma"]`, the default, or
+        `["sigma", "nu"]` for a Student-T likelihood).
 
     Attributes:
     -----------
@@ -103,10 +110,13 @@ class PymcWrapper:
         Name of the target variable. Only available after sampling.
     trace : InferenceData
         PyMC trace containing samples.
-    sigma_change_point_idx : int, optional
-        Index indicating the change point for sigma.
-    _observations : pm.Normal
-        PyMC3 Normal distribution defining the model's likelihood.
+    likelihood : Callable
+        The PyMC distribution class used for the likelihood.
+    likelihood_params : list[str]
+        Names of the likelihood's extra kwargs sourced from `model_function`'s
+        `extras`.
+    _observations : pm.Distribution
+        PyMC distribution defining the model's likelihood.
     _data_dict : dict
         Dictionary containing PyMC Data objects.
     _variables_dict : dict
@@ -146,7 +156,8 @@ class PymcWrapper:
         self,
         model_function: Callable = None,
         priors_dict: dict[str:(Callable, dict)] = None,
-        sigma_change_point_idx=None,
+        likelihood: Callable = pm.Normal,
+        likelihood_params: list[str] = None,
     ):
         self.model_function = model_function
         self.priors_dict = priors_dict
@@ -154,7 +165,10 @@ class PymcWrapper:
         self.target_name = None
         self.var_names = None
         self.model = None
-        self.sigma_change_point_idx = sigma_change_point_idx
+        self.likelihood = likelihood
+        self.likelihood_params = (
+            likelihood_params if likelihood_params is not None else ["sigma"]
+        )
         self.traces = {
             "prior": az.InferenceData(),
             "sampling": az.InferenceData(),
@@ -200,7 +214,8 @@ class PymcWrapper:
             to_dump = {
                 "model_function": self.model_function,
                 "priors_dict": self.priors_dict,
-                "sigma_change_point_idx": self.sigma_change_point_idx,
+                "likelihood": self.likelihood,
+                "likelihood_params": self.likelihood_params,
                 "features_names": self.features_names,
                 "target_name": self.target_name,
             }
@@ -223,6 +238,8 @@ class PymcWrapper:
 
         for val in self.priors_dict.values():
             val[0] = getattr(pm, val[0])
+
+        self.likelihood = getattr(pm, self.likelihood)
 
         if self.model_function is not None:
             try:
@@ -254,45 +271,58 @@ class PymcWrapper:
                     name: val[0](**val[1]) for name, val in self.priors_dict.items()
                 }
 
-                model_output = self.model_function(
+                model_func_output = self.model_function(
                     self._data_dict["x"], self._variables_dict
                 )
-                if isinstance(model_output, tuple):
-                    mu_expr, extras = model_output
+                if isinstance(model_func_output, tuple):
+                    mu_expr, extras = model_func_output
                 else:
-                    mu_expr, extras = model_output, {}
+                    mu_expr, extras = model_func_output, {}
 
                 mu = pm.Deterministic(name="mu", var=mu_expr)
 
-                # "sigma" is a reserved extras key: a model_function that computes
-                # its own (possibly heteroscedastic) noise term returns it there,
-                # in place of the plain variables_dict["sigma"] / sigma_change_point_idx
-                # mechanism below (see class docstring, and e.g.
-                # bayesbuilding.models.heating_cp_occ_rad).
-                sigma_expr = extras.pop("sigma", None)
+                # Every name in likelihood_params must be provided explicitly by
+                # model_function via extras -- no implicit fallback to
+                # variables_dict (see class docstring).
+                missing = [
+                    name for name in self.likelihood_params if name not in extras
+                ]
+                if missing:
+                    raise ValueError(
+                        f"model_function must return {missing} in its extras "
+                        f"dict for likelihood={self.likelihood.__name__} "
+                        f"(got extras keys: {list(extras)})"
+                    )
+
+                resolved_params = {}
+                for name in self.likelihood_params:
+                    value = extras.pop(name)
+                    if name in self._variables_dict:
+                        # `name` already names a prior/model variable (e.g.
+                        # model_function just forwards or indexes
+                        # variables_dict["sigma"]) -- reuse that expression
+                        # as-is rather than registering a second
+                        # pm.Deterministic under the same name, which PyMC
+                        # would reject as a duplicate.
+                        resolved_params[name] = value
+                    else:
+                        # A genuinely new quantity (e.g. a heteroscedastic
+                        # sigma computed from other priors): expose it as its
+                        # own Deterministic so it lands in the trace.
+                        resolved_params[name] = pm.Deterministic(name=name, var=value)
+                # Remaining extras are diagnostics only, not consumed by the
+                # likelihood (e.g. an internal 'heat' term).
                 self._extras_dict = {
                     name: pm.Deterministic(name=name, var=expr)
                     for name, expr in extras.items()
                 }
 
-                # Combine into likelihood function
-                if sigma_expr is not None:
-                    sigma = pm.Deterministic(name="sigma", var=sigma_expr)
-                else:
-                    sigma = (
-                        self._variables_dict["sigma"][
-                            self._data_dict["x"][:, self.sigma_change_point_idx].astype(int)
-                        ]
-                        if self.sigma_change_point_idx is not None
-                        else self._variables_dict["sigma"]
-                    )
-
-                self._observations = pm.Normal(
+                self._observations = self.likelihood(
                     name="observations",
                     mu=mu,
-                    sigma=sigma,
                     observed=self._data_dict["y"],
                     shape=self._data_dict["x"].shape[0],
+                    **resolved_params,
                 )
             self.var_names = list(self.priors_dict.keys())
 

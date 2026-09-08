@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pymc as pm
+import pytest
 
 from bayesbuilding.models import season_cp_heating_es
 from bayesbuilding.plotting import time_series_hdi, changepoint_graph
@@ -15,8 +16,9 @@ IMAGE_TEST_PATH = Path(tempfile.mkdtemp()) / "image.png"
 
 def _toy_model_with_sigma(x, variables_dict):
     """Minimal model_function exercising the (mu, extras) tuple contract: a
-    model-computed heteroscedastic "sigma" (a reserved extras key, see
-    PymcWrapper.build_model)."""
+    model-computed heteroscedastic "sigma" -- a genuinely new quantity (not a
+    prior named "sigma"), so PymcWrapper.build_model exposes it as its own
+    Deterministic."""
     driver = x[:, 0]
     base = variables_dict["base"]
     g = variables_dict["g"]
@@ -24,6 +26,34 @@ def _toy_model_with_sigma(x, variables_dict):
     alpha = variables_dict["alpha"]
     heat = pm.math.maximum(g * driver, 0)
     return base + heat, {"sigma": s0 + alpha * heat}
+
+
+def _toy_model_with_sigma_and_nu(x, variables_dict):
+    """Minimal model_function for a likelihood needing more than mu/sigma
+    (e.g. StudentT's nu): every likelihood param must come back via extras,
+    even a plain prior forwarded unchanged."""
+    driver = x[:, 0]
+    base = variables_dict["base"]
+    g = variables_dict["g"]
+    sigma = variables_dict["sigma"]
+    nu = variables_dict["nu"]
+    return base + g * driver, {"sigma": sigma, "nu": nu}
+
+
+def _season_cp_heating_es_by_state(x, variable_dict):
+    """Like season_cp_heating_es, but with a per-category sigma: the model
+    itself indexes variables_dict["sigma"] by a state column and returns it
+    explicitly via extras (replaces the old sigma_change_point_idx wrapper
+    mechanism)."""
+    t_ext = x[:, 0]
+    state = x[:, 1].astype("int32")
+    g = variable_dict["g"]
+    tau = variable_dict["tau"]
+    baseline = variable_dict["base"]
+    sigma = variable_dict["sigma"][state]
+
+    consumption = g * pm.math.maximum(tau - t_ext, 0)
+    return consumption + baseline, {"sigma": sigma}
 
 
 class TestResampleSamples:
@@ -220,8 +250,9 @@ class TestWrapper:
         assert score_weekly["sd_score"] < score_daily["sd_score"]
 
     def test_sigma_change_point_idx_indexes_sigma_by_category(self):
-        """Regression coverage for the pre-existing sigma_change_point_idx branch
-        of build_model (not exercised by any test before this change)."""
+        """Regression coverage for a per-category sigma: the model_function
+        indexes variables_dict["sigma"] itself and returns it via extras
+        (replaces the old sigma_change_point_idx wrapper parameter)."""
         index = pd.date_range("2023-01-02", periods=20, freq="D")
         text = np.linspace(0, 20, 20)
         state = (text > 10).astype(float)  # raw categorical feature column
@@ -234,14 +265,13 @@ class TestWrapper:
         data = pd.DataFrame({"Text": text, "state": state, "heating": heating}, index=index)
 
         test_model = PymcWrapper(
-            model_function=season_cp_heating_es,
+            model_function=_season_cp_heating_es_by_state,
             priors_dict={
                 "g": (pm.Normal, dict(name="g", mu=40, sigma=5)),
                 "tau": (pm.Normal, dict(name="tau", mu=12, sigma=1)),
                 "base": (pm.Normal, dict(name="base", mu=30, sigma=5)),
                 "sigma": (pm.Normal, dict(name="sigma", mu=10, sigma=2, shape=2)),
             },
-            sigma_change_point_idx=1,
         )
         test_model.sample(
             x=data[["Text", "state"]],
@@ -298,22 +328,29 @@ class TestExtrasAndModelDefinedSigma:
         # "sigma" is the reserved likelihood-scale key, not a plain extra.
         assert "sigma" not in test_model._extras_dict
 
-    def test_model_function_single_tensor_return_still_works(self):
-        """Backward compatibility: a model_function returning a bare tensor (no
-        extras tuple) still builds and samples exactly as before, falling back
-        to priors_dict["sigma"]."""
+    def test_model_function_bare_tensor_return_valid_when_no_likelihood_params(self):
+        """A model_function returning a bare tensor (no extras tuple) is only
+        valid when likelihood_params is empty -- here pm.Normal falls back to
+        its own default sigma=1, with no priors_dict["sigma"] involved."""
         index = pd.date_range("2023-01-02", periods=10, freq="D")
         data = pd.DataFrame({"Text": np.linspace(0, 20, 10)}, index=index)
         data["heating"] = 50 * np.maximum(14 - data["Text"], 0) + 50
 
+        def _bare_tensor_model(x, variable_dict):
+            t_ext = x[:, 0]
+            g = variable_dict["g"]
+            tau = variable_dict["tau"]
+            baseline = variable_dict["base"]
+            return baseline + g * pm.math.maximum(tau - t_ext, 0)
+
         test_model = PymcWrapper(
-            model_function=season_cp_heating_es,
+            model_function=_bare_tensor_model,
             priors_dict={
                 "g": (pm.Normal, dict(name="g", mu=40, sigma=5)),
                 "tau": (pm.Normal, dict(name="tau", mu=12, sigma=1)),
                 "base": (pm.Normal, dict(name="base", mu=30, sigma=5)),
-                "sigma": (pm.Normal, dict(name="sigma", mu=12, sigma=1)),
             },
+            likelihood_params=[],
         )
         test_model.sample(
             x=data[["Text"]],
@@ -324,3 +361,59 @@ class TestExtrasAndModelDefinedSigma:
             sample_kwargs={"random_seed": 42, "cores": 1},
         )
         assert test_model._extras_dict == {}
+
+    def test_missing_likelihood_param_raises_value_error(self):
+        """A model_function that omits a required likelihood_params key from
+        its extras dict fails fast with a clear error, instead of a KeyError
+        on some guessed variables_dict lookup."""
+
+        def _model_missing_sigma(x, variable_dict):
+            return variable_dict["base"], {}
+
+        with pytest.raises(ValueError, match="sigma"):
+            PymcWrapper(
+                model_function=_model_missing_sigma,
+                priors_dict={
+                    "base": (pm.Normal, dict(name="base", mu=0, sigma=1)),
+                    "sigma": (pm.HalfNormal, dict(name="sigma", sigma=1)),
+                },
+            )
+
+    def test_studentt_likelihood_uses_extra_nu_param(self):
+        """likelihood/likelihood_params let a wrapper use a distribution family
+        other than Normal, with model_function supplying every extra kwarg
+        (here sigma and nu for a Student-T) explicitly via extras."""
+        index = pd.date_range("2023-01-02", periods=20, freq="D")
+        driver = np.linspace(0, 10, 20)
+        data = pd.DataFrame({"driver": driver}, index=index)
+
+        true_base, true_g, true_sigma = 10, 2, 1.5
+        np.random.seed(3)
+        data["y"] = (
+            true_base
+            + true_g * driver
+            + true_sigma * np.random.standard_t(5, size=20)
+        )
+
+        test_model = PymcWrapper(
+            model_function=_toy_model_with_sigma_and_nu,
+            priors_dict={
+                "base": (pm.Normal, dict(name="base", mu=10, sigma=5)),
+                "g": (pm.Normal, dict(name="g", mu=2, sigma=1)),
+                "sigma": (pm.HalfNormal, dict(name="sigma", sigma=5)),
+                "nu": (pm.Gamma, dict(name="nu", alpha=2, beta=0.1)),
+            },
+            likelihood=pm.StudentT,
+            likelihood_params=["sigma", "nu"],
+        )
+        test_model.sample(
+            x=data[["driver"]],
+            y=data["y"],
+            draws=200,
+            tune=200,
+            chains=1,
+            sample_kwargs={"random_seed": 42, "cores": 1},
+        )
+
+        assert "nu" in test_model.traces["sampling"].posterior
+        assert "sigma" in test_model.traces["sampling"].posterior

@@ -26,7 +26,7 @@ def occ_cp(x, variables_dict: dict):
     """
     wd_we = x[:, 0].astype(int)
     set_point = variables_dict["set_point"]
-    return set_point[wd_we]
+    return set_point[wd_we], {"sigma": variables_dict["sigma"]}
 
 
 def season_cp_occ_cp_heating_cooling_es(x, variables_dict: dict):
@@ -64,7 +64,7 @@ def season_cp_occ_cp_heating_cooling_es(x, variables_dict: dict):
     baseline = base[occupation]
     heat = g_h[occupation] * pm.math.maximum(tau_h[occupation] - t_ext, 0)
     cool = g_c[occupation] * pm.math.maximum(t_ext - tau_c[occupation], 0)
-    return baseline + heat + cool
+    return baseline + heat + cool, {"sigma": variables_dict["sigma"]}
 
 
 def season_cp_heating_es(x, variable_dict):
@@ -87,7 +87,7 @@ def season_cp_heating_es(x, variable_dict):
     baseline = variable_dict["base"]
 
     consumption = g * pm.math.maximum(tau - t_ext, 0)
-    return consumption + baseline
+    return consumption + baseline, {"sigma": variable_dict["sigma"]}
 
 
 def season_cp_heating_es_rad(x, variable_dict):
@@ -122,7 +122,7 @@ def season_cp_heating_es_rad(x, variable_dict):
         is_heating,
         baseline[0] + g * pm.math.maximum(tau - t_ext, 0) - fs * rad,
         baseline[1],
-    )
+    ), {"sigma": variable_dict["sigma"]}
 
 
 def season_cp_heating_es_setback(x, variable_dict):
@@ -152,7 +152,7 @@ def season_cp_heating_es_setback(x, variable_dict):
         is_heating,
         baseline[0] + g * pm.math.maximum(tau - t_ext, 0),
         baseline[1],
-    )
+    ), {"sigma": variable_dict["sigma"]}
 
 
 def season_cp_heating_es_rad_g_by_period(x, variable_dict):
@@ -189,7 +189,7 @@ def season_cp_heating_es_rad_g_by_period(x, variable_dict):
         is_heating,
         baseline[0] + g[period] * pm.math.maximum(tau - t_ext, 0) - fs * rad,
         baseline[1],
-    )
+    ), {"sigma": variable_dict["sigma"]}
 
 
 def season_cp_heating_es_rad_tau_by_period(x, variable_dict):
@@ -223,7 +223,7 @@ def season_cp_heating_es_rad_tau_by_period(x, variable_dict):
         is_heating,
         baseline[0] + g * pm.math.maximum(tau[period] - t_ext, 0) - fs * rad,
         baseline[1],
-    )
+    ), {"sigma": variable_dict["sigma"]}
 
 
 def season_cp_heating_es_rad_base_by_period(x, variable_dict):
@@ -258,7 +258,7 @@ def season_cp_heating_es_rad_base_by_period(x, variable_dict):
         is_heating,
         baseline + g * pm.math.maximum(tau - t_ext, 0) - fs * rad,
         baseline,
-    )
+    ), {"sigma": variable_dict["sigma"]}
 
 
 def season_cp_heating_es_rad_g_tau_by_period(x, variable_dict):
@@ -298,7 +298,7 @@ def season_cp_heating_es_rad_g_tau_by_period(x, variable_dict):
         is_heating,
         baseline[0] + g[period] * pm.math.maximum(tau[period] - t_ext, 0) - fs * rad,
         baseline[1],
-    )
+    ), {"sigma": variable_dict["sigma"]}
 
 
 def heating_es_dju(x, variable_dict):
@@ -327,7 +327,7 @@ def heating_es_dju(x, variable_dict):
     baseline = variable_dict["base"]
 
     consumption = g * dju
-    return consumption + baseline
+    return consumption + baseline, {"sigma": variable_dict["sigma"]}
 
 
 def heating_es_dju_rad(x, variable_dict):
@@ -357,7 +357,7 @@ def heating_es_dju_rad(x, variable_dict):
     fs = variable_dict["fs"]
     baseline = variable_dict["base"]
 
-    return baseline + g * dju - fs * rad
+    return baseline + g * dju - fs * rad, {"sigma": variable_dict["sigma"]}
 
 
 def heating_es_dju_rad_occ(x, variable_dict):
@@ -388,7 +388,9 @@ def heating_es_dju_rad_occ(x, variable_dict):
     fs = variable_dict["fs"]
     baseline = variable_dict["base"]
 
-    return baseline[occ] + g[occ] * dju - fs[occ] * rad
+    return baseline[occ] + g[occ] * dju - fs[occ] * rad, {
+        "sigma": variable_dict["sigma"]
+    }
 
 
 def heating_es_dju_rad_occ_setback(x, variable_dict):
@@ -422,7 +424,9 @@ def heating_es_dju_rad_occ_setback(x, variable_dict):
     fs = variable_dict["fs"]
     base = variable_dict["base"]
 
-    return pm.math.switch(occ, base[0] + g * dju - fs * rad, base[1])
+    return pm.math.switch(occ, base[0] + g * dju - fs * rad, base[1]), {
+        "sigma": variable_dict["sigma"]
+    }
 
 
 def season_cp_heating_es_dt(x, variable_dict):
@@ -447,7 +451,7 @@ def season_cp_heating_es_dt(x, variable_dict):
     baseline = variable_dict["base"]
 
     consumption = g * pm.math.maximum(dt - tau, 0)
-    return consumption + baseline
+    return consumption + baseline, {"sigma": variable_dict["sigma"]}
 
 
 def season_cp_occ_cp_es_dt(x, variable_dict):
@@ -474,7 +478,7 @@ def season_cp_occ_cp_es_dt(x, variable_dict):
     baseline = variable_dict["baseline"]
 
     consumption = g[occ] * pm.math.maximum(dt - tau[occ], 0)
-    return consumption + baseline[occ]
+    return consumption + baseline[occ], {"sigma": variable_dict["sigma"]}
 
 
 def season_cp_occ_cp_heating_es(x, variable_dict):
@@ -501,7 +505,7 @@ def season_cp_occ_cp_heating_es(x, variable_dict):
     baseline = variable_dict["baseline"]
 
     consumption = g[occ] * pm.math.maximum(tau[occ] - t_ext, 0)
-    return consumption + baseline[occ]
+    return consumption + baseline[occ], {"sigma": variable_dict["sigma"]}
 
 
 def we_cst_wd_radiation_lighting(x, variable_dict):
@@ -523,7 +527,9 @@ def we_cst_wd_radiation_lighting(x, variable_dict):
     base_we = variable_dict["base_we"]
     base_wd = variable_dict["base_wd"]
 
-    return pm.math.switch(x[:, 0], base_we, base_wd + fs * x[:, 1])
+    return pm.math.switch(x[:, 0], base_we, base_wd + fs * x[:, 1]), {
+        "sigma": variable_dict["sigma"]
+    }
 
 
 def season_cp_occ_cp_rad_heating_cooling_es(x, variables_dict: dict):
@@ -575,7 +581,9 @@ def season_cp_occ_cp_rad_heating_cooling_es(x, variables_dict: dict):
     solar_cool = -fs_c[occupation] * pm.math.maximum(rad - tau_rad_c[occupation], 0)
     heat = g_h[occupation] * pm.math.maximum(tau_h[occupation] - t_ext, 0)
     cool = g_c[occupation] * pm.math.maximum(t_ext - tau_c[occupation], 0)
-    return baseline + heat + cool + solar_cool + solar_heat
+    return baseline + heat + cool + solar_cool + solar_heat, {
+        "sigma": variables_dict["sigma"]
+    }
 
 
 def heating_cp_occ_rad(x, variables_dict: dict):
@@ -635,7 +643,7 @@ def ppv_projected_rad_cst_eff(x, variables_dict: dict):
     efficiency = variables_dict["efficiency"]
     surface = variables_dict["surface"]
 
-    return surface * efficiency * rad
+    return surface * efficiency * rad, {"sigma": variables_dict["sigma"]}
 
 
 def ppv_noct_model(x, variables_dict: dict):
@@ -673,4 +681,4 @@ def ppv_noct_model(x, variables_dict: dict):
             * rad / STC_IRRADIANCE
     )
 
-    return inverter_eff * panel_power
+    return inverter_eff * panel_power, {"sigma": variables_dict["sigma"]}
