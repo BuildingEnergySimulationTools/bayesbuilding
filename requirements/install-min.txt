@@ -1,7 +1,7 @@
 pandas==2.2.0
 numpy==1.26.3
 pymc==5.20.0
-arviz==0.20.0
+arviz==1.2.0  # kept in sync with pyproject.toml's exact pin
 xarray==2024.1.0
 matplotlib==3.7.5
 plotly==5.13.1

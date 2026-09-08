@@ -11,17 +11,16 @@ license = { file = "LICENCE.md" }
 authors = [
     { name = "Nobatek/INEF4", email = "bdurandestebe@nobatek.inef4.com" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "pymc>=5.20.0,<6",
-    "arviz>=0.20.0,<1",
+    "pymc>=6.0,<7",
+    "arviz==1.2.0",
     "xarray>=2024.1.0",
     "pandas>=2.2.0",
     "numpy>=1.26.3",

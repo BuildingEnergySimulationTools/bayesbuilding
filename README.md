@@ -3,7 +3,7 @@
 </p>
 
 [![PyPI](https://img.shields.io/pypi/v/bayesbuilding?label=pypi%20package)](https://pypi.org/project/bayesbuilding/)
-[![Static Badge](https://img.shields.io/badge/python-3.10_%7C_3.11-blue)](https://pypi.org/project/bayesbuilding/)
+[![Static Badge](https://img.shields.io/badge/python-3.12-blue)](https://pypi.org/project/bayesbuilding/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![CI](https://github.com/BuildingEnergySimulationTools/bayesbuilding/actions/workflows/build.yaml/badge.svg)](https://github.com/BuildingEnergySimulationTools/bayesbuilding/actions)
@@ -37,7 +37,7 @@ project.
 pip install bayesbuilding
 ```
 
-Requires Python >= 3.10. See `pyproject.toml` for the full list of dependencies
+Requires Python >= 3.12. See `pyproject.toml` for the full list of dependencies
 (PyMC, ArviZ, xarray, pandas, numpy, matplotlib, plotly, seaborn).
 
 ## Quickstart
