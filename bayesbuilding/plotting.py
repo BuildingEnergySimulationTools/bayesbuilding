@@ -739,9 +739,7 @@ def plot_cumulative_gap_hdi(
 
     final_gap = d_data["gap_med"].iloc[-1]
     final_half_width = (d_data["gap_up"].iloc[-1] - d_data["gap_low"].iloc[-1]) / 2
-    coverage = (
-        (d_data["gap_low"] <= 0) & (d_data["gap_up"] >= 0)
-    ).mean() * 100
+    coverage = ((d_data["gap_low"] <= 0) & (d_data["gap_up"] >= 0)).mean() * 100
 
     daily_median = np.median(_flatten_chains(prediction), axis=0)
     nmbe_percent = (
@@ -809,7 +807,9 @@ def plot_cumulative_gap_hdi(
 
     elif backend == "matplotlib":
         plt.figure(figsize=figsize)
-        plt.axhline(0, color="black", linestyle="--", linewidth=1, label="Mesure (référence)")
+        plt.axhline(
+            0, color="black", linestyle="--", linewidth=1, label="Mesure (référence)"
+        )
         plt.plot(
             d_data.index,
             d_data["gap_med"],
@@ -1112,9 +1112,7 @@ def residual_cusum_plot(
             label=f"{name} moyenne = {mean_res:.0f}",
         )
 
-        permuted = np.array(
-            [rng.permutation(residual) for _ in range(n_permutations)]
-        )
+        permuted = np.array([rng.permutation(residual) for _ in range(n_permutations)])
         null_cusum = running_total + np.cumsum(permuted, axis=1)
         lower_env, upper_env = np.quantile(null_cusum, envelope_q, axis=0)
         ax_cusum.fill_between(
@@ -1270,11 +1268,9 @@ def changepoint_graph(
     if backend == "plotly":
         fig = make_subplots()
         if isinstance(d_data.index, pd.DatetimeIndex):
-            observed_hovertemplate = (
-                (x_label or x_name) + ": %{x}<br>"
-                + (y_label or y_name) + ": %{y}<br>"
-                "Date: %{customdata}<extra></extra>"
-            )
+            observed_hovertemplate = (x_label or x_name) + ": %{x}<br>" + (
+                y_label or y_name
+            ) + ": %{y}<br>" "Date: %{customdata}<extra></extra>"
             observed_customdata = d_data.index.strftime("%Y-%m-%d %H:%M")
         else:
             observed_hovertemplate = None

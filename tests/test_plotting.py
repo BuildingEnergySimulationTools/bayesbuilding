@@ -33,9 +33,7 @@ class TestFlattenChains:
 class TestGetCumulativeQuantiles:
     def test_constant_per_draw_exact_cumsum(self):
         # 3 draws, each constant across 4 timesteps: values 1, 2, 3
-        samples = np.array(
-            [[1, 1, 1, 1], [2, 2, 2, 2], [3, 3, 3, 3]], dtype=float
-        )
+        samples = np.array([[1, 1, 1, 1], [2, 2, 2, 2], [3, 3, 3, 3]], dtype=float)
         q = get_cumulative_quantiles(samples, lower_q=0.0, upper_q=1.0)
         t = np.array([1, 2, 3, 4])
         np.testing.assert_allclose(q[0, :], 1 * t)  # min draw
@@ -84,11 +82,8 @@ class TestPlotCumulativeEnergyHdi:
 
     def test_invalid_backend_raises(self):
         measure, prediction = self._sample_data()
-        try:
+        with pytest.raises(ValueError):
             plot_cumulative_energy_hdi(measure, prediction, backend="bogus")
-            assert False, "expected ValueError"
-        except ValueError:
-            pass
 
 
 class TestPlotCumulativeGapHdi:
@@ -117,11 +112,8 @@ class TestPlotCumulativeGapHdi:
 
     def test_invalid_backend_raises(self):
         measure, prediction = self._sample_data()
-        try:
+        with pytest.raises(ValueError):
             plot_cumulative_gap_hdi(measure, prediction, backend="bogus")
-            assert False, "expected ValueError"
-        except ValueError:
-            pass
 
     def test_gap_bounds_are_reversed_cumulative_quantiles(self):
         # gap = measure_cum - pred_cum is a decreasing transform of pred_cum,
@@ -188,9 +180,7 @@ class TestTimeSeriesHdiStateOverlay:
 
     def test_plotly_backend_with_state(self):
         measure, prediction, state = self._sample_data()
-        fig = time_series_hdi(
-            measure, prediction, state_ts=state, backend="plotly"
-        )
+        fig = time_series_hdi(measure, prediction, state_ts=state, backend="plotly")
         assert fig is not None
 
     def test_matplotlib_backend_with_state(self, tmp_path):

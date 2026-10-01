@@ -156,7 +156,6 @@ class TestWrapper:
         # === test save / load ===
         test_model.save_model(Path(tmp_path))
 
-
         new_model = PymcWrapper()
         new_model.load_model(Path(tmp_path))
 
@@ -262,7 +261,9 @@ class TestWrapper:
         np.random.seed(1)
         noise = np.random.randn(20) * sigma_by_state[state.astype(int)]
         heating = true_g * np.maximum(true_tau - text, 0) + true_base + noise
-        data = pd.DataFrame({"Text": text, "state": state, "heating": heating}, index=index)
+        data = pd.DataFrame(
+            {"Text": text, "state": state, "heating": heating}, index=index
+        )
 
         test_model = PymcWrapper(
             model_function=_season_cp_heating_es_by_state,
@@ -390,9 +391,7 @@ class TestExtrasAndModelDefinedSigma:
         true_base, true_g, true_sigma = 10, 2, 1.5
         np.random.seed(3)
         data["y"] = (
-            true_base
-            + true_g * driver
-            + true_sigma * np.random.standard_t(5, size=20)
+            true_base + true_g * driver + true_sigma * np.random.standard_t(5, size=20)
         )
 
         test_model = PymcWrapper(

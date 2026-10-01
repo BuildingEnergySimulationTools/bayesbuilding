@@ -208,7 +208,7 @@ class PymcWrapper:
             os.makedirs(dir_path)
 
         for name, traces in self.traces.items():
-            traces.to_netcdf((dir_path / f"{name}.nc").as_posix())
+            traces.to_netcdf((dir_path / f"{name}.nc").as_posix(), engine="h5netcdf")
 
         with open(dir_path / "config.json", "w", encoding="utf-8") as f:
             to_dump = {

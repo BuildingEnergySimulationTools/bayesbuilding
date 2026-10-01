@@ -649,7 +649,7 @@ def heating_cp_occ_rad(x, variables_dict: dict):
 
     sigma = pt.sqrt(s0[occupation] ** 2 + (s1 * w) ** 2)
 
-    return baseline + heat, {"sigma": sigma, "lower": pt.constant(0.0)}
+    return mu, {"sigma": sigma, "lower": pt.constant(0.0)}
 
 
 def heating_dt_occ_rad(x, variables_dict: dict):
@@ -679,9 +679,7 @@ def heating_dt_occ_rad(x, variables_dict: dict):
     s0 = variables_dict["s0"]
 
     mu = (
-            g[occupation] * dt
-            - fs[occupation] * rad
-            - alpha[occupation] * elec_consumption
+        g[occupation] * dt - fs[occupation] * rad - alpha[occupation] * elec_consumption
     )
 
     sigma = s0[occupation]
@@ -774,6 +772,7 @@ def heating_dt_occ_rad_lag(x, variables_dict: dict):
     sigma = s0[occupation]
 
     return mu, {"sigma": sigma, "lower": pt.constant(0.0)}
+
 
 def heating_dt_occ_rad_DTdt(x, variables_dict: dict):
     """
