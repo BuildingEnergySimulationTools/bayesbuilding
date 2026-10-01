@@ -18,7 +18,7 @@ def r2_score(y_true, y_pred):
     return 1 - numerator / denominator
 
 
-def _resample_samples(flattened_trace: np.ndarray, y: pd.Series, resample_rule: str):
+def resample_samples(flattened_trace: np.ndarray, y: pd.Series, resample_rule: str):
     """Sum each (samples, time) posterior predictive sample path, and `y`, into
     `resample_rule` bins (e.g. "W"). Aggregation happens on daily sample paths
     rather than on the driving variable before re-evaluating the model, since a
@@ -239,7 +239,13 @@ class PymcWrapper:
         for val in self.priors_dict.values():
             val[0] = getattr(pm, val[0])
 
-        self.likelihood = getattr(pm, self.likelihood)
+        # Traces saved before likelihood/likelihood_params existed have no
+        # "likelihood" key in config.json, so self.likelihood is never
+        # overwritten by the setattr loop above and stays the __init__
+        # default (already a class, e.g. pm.Normal) -- only resolve it when
+        # it's still the saved string name.
+        if isinstance(self.likelihood, str):
+            self.likelihood = getattr(pm, self.likelihood)
 
         if self.model_function is not None:
             try:
@@ -458,7 +464,7 @@ class PymcWrapper:
         flattened_trace = np.array(post_trace).reshape(-1, post_trace.shape[-1])
 
         if resample_rule is not None:
-            flattened_trace, y = _resample_samples(flattened_trace, y, resample_rule)
+            flattened_trace, y = resample_samples(flattened_trace, y, resample_rule)
 
         scores_array = np.array(
             [score_function(y, sample) for sample in flattened_trace]
