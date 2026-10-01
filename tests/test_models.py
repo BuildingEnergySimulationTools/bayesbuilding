@@ -16,7 +16,7 @@ def test_heating_cp_occ_rad_floors_heat_and_computes_sigma():
         "g": np.array([10.0, 10.0]),
         "tau": np.array([18.0, 18.0]),
         "fs": np.array([1.0, 1.0]),
-        "s0": np.array(500.0),
+        "s0": np.array([500.0, 500.0]),
         "s1": np.array(50.0),
     }
 
