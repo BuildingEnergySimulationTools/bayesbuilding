@@ -1,3 +1,11 @@
+"""Legacy forward-model functions -- frozen, do not add new models here.
+
+New models are declared as formulas (see :mod:`bayesbuilding.formula`), e.g. in
+a candidate's JSON config. These functions are kept so that traces saved with
+``PymcWrapper.save_model`` before formulas existed (which reference a function
+of this module by name) can still be reloaded.
+"""
+
 import pymc as pm
 import pytensor.tensor as pt
 

@@ -1480,3 +1480,107 @@ def compare_bars(
         plt.savefig(image_path, format="png", bbox_inches="tight")
 
     return plt.gcf()
+
+
+def plot_candidate_metric_bars(
+    comparison: pd.DataFrame,
+    metric: str,
+    std_col: str = None,
+    n_std: float = 2.0,
+    ascending: bool = False,
+    thresholds: float | tuple[float, float] = None,
+    threshold_color: str = "#EF553B",
+    y_label: str = None,
+    title: str = None,
+    bar_color: str = "#2a78d6",
+) -> go.Figure:
+    """Bar chart ranking candidates by one ``comparison_train`` metric
+    (descending by default), with symmetric error bars at ``+/- n_std`` times
+    the metric's own std/se column.
+
+    ``comparison`` is the DataFrame returned by
+    :func:`bayesbuilding.training.compare_candidates` -- candidate name as index, one
+    column per metric (``elpd_loo``, ``elpd_loo_se``, ``r2_mean_d``,
+    ``r2_sd_d``, ...) -- **not** its ``.reset_index().T.reset_index()``
+    transposed display form.
+
+    ``std_col`` defaults to the naming convention
+    :func:`bayesbuilding.training.evaluate_candidate` produces: ``"{x}_mean_{suffix}"``
+    -> ``"{x}_sd_{suffix}"`` (e.g. ``"r2_mean_d"`` -> ``"r2_sd_d"``), falling
+    back to ``"{metric}_se"``/``"{metric}_sd"`` for metrics with no ``_mean_``
+    in their name (e.g. ``"elpd_loo"`` -> ``"elpd_loo_se"``). Pass it
+    explicitly to override.
+
+    ``thresholds`` draws optional dashed reference lines (e.g. ASHRAE
+    Guideline 14-style M&V acceptance bounds): a single number (e.g. ``15``
+    for a monthly CV(RMSE) <= 15% cap) draws one line; a pair (e.g.
+    ``(-5, 5)`` for a monthly NMBE band) draws both lines and shades the
+    region between them as the "passing" zone. No assumption is made about
+    which side of a single threshold is acceptable -- only a two-value pair
+    gets a shaded band.
+
+    Single series (one bar per candidate, same metric) -- one hue, no legend,
+    per the "identity via color" rule not applying here (bars are distinguished
+    by their x position/label, not by color).
+    """
+    if metric not in comparison.columns:
+        raise KeyError(
+            f"{metric!r} not in comparison columns: {list(comparison.columns)}"
+        )
+
+    if std_col is None:
+        candidate_cols = (
+            [metric.replace("_mean_", "_sd_")] if "_mean_" in metric else []
+        ) + [f"{metric}_se", f"{metric}_sd"]
+        std_col = next((c for c in candidate_cols if c in comparison.columns), None)
+        if std_col is None:
+            raise KeyError(
+                f"Could not infer a std/se column for {metric!r} (tried "
+                f"{candidate_cols}); pass std_col explicitly."
+            )
+    elif std_col not in comparison.columns:
+        raise KeyError(
+            f"{std_col!r} not in comparison columns: {list(comparison.columns)}"
+        )
+
+    ranked = comparison[[metric, std_col]].sort_values(metric, ascending=ascending)
+
+    fig = go.Figure(
+        go.Bar(
+            x=ranked.index.astype(str),
+            y=ranked[metric],
+            error_y=dict(type="data", array=n_std * ranked[std_col], visible=True),
+            marker_color=bar_color,
+        )
+    )
+
+    if thresholds is not None:
+        threshold_values = (
+            [thresholds] if isinstance(thresholds, (int, float)) else list(thresholds)
+        )
+        if len(threshold_values) == 2:
+            low, high = sorted(threshold_values)
+            fig.add_hrect(
+                y0=low,
+                y1=high,
+                fillcolor="rgba(44,160,44,0.08)",
+                line_width=0,
+                layer="below",
+            )
+        for value in threshold_values:
+            fig.add_hline(
+                y=value,
+                line_dash="dash",
+                line_color=threshold_color,
+                annotation_text=f"{value:g}",
+                annotation_position="right",
+            )
+
+    fig.update_layout(
+        template="plotly_white",
+        title=title or f"{metric} par modèle (± {n_std:g}σ)",
+        xaxis_title="Modèle",
+        yaxis_title=y_label or metric,
+        showlegend=False,
+    )
+    return fig

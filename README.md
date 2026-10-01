@@ -23,10 +23,15 @@ project.
 
 - `PymcWrapper`: a thin wrapper around a PyMC model that handles prior/posterior
   sampling, scoring, LOO cross-validation, and saving/loading fitted models to disk.
-- A library of ready-to-use `bayesbuilding.models` functions covering common building
-  energy patterns: seasonal change-point energy signatures, heating/cooling with
-  occupation change points, solar-radiation-augmented models, artificial lighting, and
-  PV panel production (constant efficiency and NOCT models).
+- Forward models written as formulas (`bayesbuilding.formula.FormulaModel`), e.g.
+  `"g[occ]*max(tau - text, 0) - fs*rad + base[occ]"`: no Python function to write for
+  a new model variant. (`bayesbuilding.models` holds the older hand-written functions,
+  frozen and kept only to reload traces saved with them.)
+- JSON candidate configs (`bayesbuilding.candidates`) and a training loop that fits,
+  scores (LOO, R2, NMBE, CV(RMSE), MAE at daily/weekly/monthly resolution) and ranks
+  candidates (`bayesbuilding.training.train_candidates`).
+- Control charts on residuals (`bayesbuilding.control_charts`): X-bar, EWMA (with alarm
+  confirmation/reset) and CUSUM, with limits following the model's own sigma.
 - Plotting helpers (`bayesbuilding.plotting`) for prior/posterior comparison, HDI time
   series plots, and change-point diagnostic plots, with both `matplotlib` and `plotly`
   backends.
@@ -47,7 +52,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
-from bayesbuilding.models import season_cp_heating_es
+from bayesbuilding.formula import FormulaModel
 from bayesbuilding.wrapper import PymcWrapper
 
 # Monthly external temperature and heating consumption
@@ -57,10 +62,10 @@ data = pd.DataFrame(
 )
 data["heating"] = 50 * np.maximum(14 - data["Text"], 0) + 50 + np.random.randn(12) * 5
 
-# Define the model and priors for a seasonal change-point energy signature:
-# heating = g * max(tau - Text, 0) + base
+# Define the model and priors for a seasonal change-point energy signature.
+# Symbols that are not priors are inputs, i.e. columns of x.
 model = PymcWrapper(
-    model_function=season_cp_heating_es,
+    model_function=FormulaModel(mu="g*max(tau - Text, 0) + base", sigma="sigma"),
     priors_dict={
         "g": (pm.Normal, dict(name="g", mu=40, sigma=5)),
         "tau": (pm.Normal, dict(name="tau", mu=12, sigma=1)),
@@ -82,7 +87,28 @@ reloaded = PymcWrapper()
 reloaded.load_model("my_model")
 ```
 
-See `bayesbuilding/models.py` for the full list of built-in model functions and
-`tests/test_wrapper.py` for a complete end-to-end example, including scoring on held-out
+## Formula grammar
+
+- Operators `+ - * / **`, numeric constants, and the functions `max(a, b)`,
+  `min(a, b)`, `switch(cond, a, b)`, `sigmoid`, `sqrt`, `exp`, `log`, `abs`.
+- `g[occ]` / `g[occ, 1]` index a vector/matrix prior by a categorical input.
+- `sigma` is the likelihood scale and may be heteroscedastic, e.g.
+  `"sqrt(s0[occ]**2 + (s1*sigmoid((tau - text)/1.5))**2)"`; `lower` (default `0.0`)
+  is returned for a `TruncatedNormal` likelihood, `None` disables it.
+- Input order (the columns of `x`): continuous drivers first, then categorical inputs,
+  each in order of first appearance.
+
+Expressions are parsed against a whitelist, never `eval`-ed. In a candidate config:
+
+```json
+{
+  "name": "dt_occ",
+  "model": {"mu": "g[occ]*dt - fs[occ]*rad", "sigma": "s0[occ]", "lower": 0.0},
+  "inputs": {"dt": "dt__C", "rad": "GHI__W/m2", "occ": "occupation"},
+  "priors": {"g": {"dist": "HalfNormal", "kwargs": {"sigma": 500, "shape": 2}}, "...": {}}
+}
+```
+
+See `tests/test_wrapper.py` for a complete end-to-end example, including scoring on held-out
 data and plotting predictions with `bayesbuilding.plotting.time_series_hdi` and
 `changepoint_graph`.

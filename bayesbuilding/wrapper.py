@@ -3,6 +3,7 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 import bayesbuilding.models as mods
+from bayesbuilding.formula import FormulaModel
 import warnings
 
 import arviz as az
@@ -144,9 +145,10 @@ class PymcWrapper:
     load_model(Path):
         Load the model traces and json file contained in the desired path and build
         the pymc model.
-        If the loaded model function is not in bayesbuilding.model, it must
-        be provided separately and the pymc model must be build using the build_model()
-        method.
+        A FormulaModel is rebuilt from its saved spec. A legacy model function
+        is looked up by name in bayesbuilding.models; if it is not there, it
+        must be provided separately and the pymc model must be build using the
+        build_model() method.
     plot_dist_comparison(var_names):
         Plot compare prior and posterior distributions of variables and observations
         var_names arguments filter the values to display. default is self.var_names
@@ -203,7 +205,8 @@ class PymcWrapper:
 
         return string_out
 
-    def save_model(self, dir_path: Path):
+    def save_model(self, dir_path: Path | str):
+        dir_path = Path(dir_path)
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
 
@@ -211,8 +214,13 @@ class PymcWrapper:
             traces.to_netcdf((dir_path / f"{name}.nc").as_posix(), engine="h5netcdf")
 
         with open(dir_path / "config.json", "w", encoding="utf-8") as f:
+            # A FormulaModel is saved as its spec (rebuilt on load); a legacy
+            # model function is saved by name and looked up in
+            # bayesbuilding.models on load.
+            is_formula = hasattr(self.model_function, "to_dict")
             to_dump = {
-                "model_function": self.model_function,
+                "model_function": None if is_formula else self.model_function,
+                "model_spec": self.model_function.to_dict() if is_formula else None,
                 "priors_dict": self.priors_dict,
                 "likelihood": self.likelihood,
                 "likelihood_params": self.likelihood_params,
@@ -223,7 +231,8 @@ class PymcWrapper:
                 to_dump, f, ensure_ascii=False, default=custom_serializer, indent=4
             )
 
-    def load_model(self, dir_path: Path):
+    def load_model(self, dir_path: Path | str):
+        dir_path = Path(dir_path)
         if not os.path.exists(dir_path):
             raise ValueError(f"Provided dir_path : {dir_path} not found")
 
@@ -247,7 +256,10 @@ class PymcWrapper:
         if isinstance(self.likelihood, str):
             self.likelihood = getattr(pm, self.likelihood)
 
-        if self.model_function is not None:
+        model_spec = config_dict.get("model_spec")
+        if model_spec is not None:
+            self.model_function = FormulaModel.from_dict(model_spec)
+        elif self.model_function is not None:
             try:
                 self.model_function = getattr(mods, self.model_function)
             except AttributeError:
