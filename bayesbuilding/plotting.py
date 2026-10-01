@@ -23,6 +23,40 @@ def _flatten_chains(prediction):
     return prediction
 
 
+def _boolean_blocks(index: pd.Index, mask: np.ndarray) -> list[tuple]:
+    """Group contiguous True positions of `mask` (aligned with `index`) into
+    (start, end) blocks expressed in `index` units. A block covering a single
+    position is padded +/- half of `index`'s median step so it renders as a
+    visible band instead of a zero-width one."""
+    mask = np.asarray(mask, dtype=bool)
+    if not mask.any():
+        return []
+
+    if len(index) > 1:
+        half_step = (index[1:] - index[:-1]).median() / 2
+    else:
+        half_step = pd.Timedelta("1D") if isinstance(index, pd.DatetimeIndex) else 1
+
+    blocks = []
+    run_start = None
+    for i, val in enumerate(mask):
+        if val and run_start is None:
+            run_start = i
+        elif not val and run_start is not None:
+            blocks.append((run_start, i - 1))
+            run_start = None
+    if run_start is not None:
+        blocks.append((run_start, len(mask) - 1))
+
+    result = []
+    for start_i, end_i in blocks:
+        start, end = index[start_i], index[end_i]
+        if start_i == end_i:
+            start, end = start - half_step, end + half_step
+        result.append((start, end))
+    return result
+
+
 def get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut):
     prediction = _flatten_chains(prediction)
 
@@ -101,6 +135,10 @@ def time_series_hdi(
     image_path: Path = None,
     figsize: tuple = (10, 6),
     backend: str = "plotly",
+    state_ts: pd.Series | np.ndarray = None,
+    state_label: str = "État",
+    state_color: str = "grey",
+    state_alpha: float = 0.15,
 ):
     """
     Visualise actual measure time series  and probabilist model prediction.
@@ -118,6 +156,18 @@ def time_series_hdi(
     - upper_cut (float): Upper bound for the high-density interval (optional).
     - lower_cut (float): Lower bound for the high-density interval (optional).
     - backend (str): switch between a matplotlib or a plotly render
+    - state_ts (pd.Series | np.ndarray, optional): a boolean or 0/1 time series
+      (e.g. occupancy, alarm) used to shade vertical bands wherever it is
+      True/1 -- nothing is drawn where it is False/0 or missing. If a
+      `pd.Series`, it is reindexed onto `measure_ts`'s index (any position
+      not present, or NaN, is treated as False); otherwise it must have the
+      same length/order as `measure_ts`. A block spanning a single time step
+      is padded +/- half the series' median time step so it stays visible.
+    - state_label (str): legend label for the shaded state bands (default
+      "État").
+    - state_color (str): color used for the shaded state bands (default
+      "grey").
+    - state_alpha (float): opacity of the shaded state bands (default 0.15).
 
     Returns:
     - None: The function displays the plot.
@@ -128,6 +178,16 @@ def time_series_hdi(
     d_data["pred_low"] = pridiction_q[0, :]
     d_data["pred_med"] = pridiction_q[1, :]
     d_data["pred_up"] = pridiction_q[2, :]
+
+    state_blocks = []
+    if state_ts is not None:
+        if isinstance(state_ts, pd.Series):
+            aligned = state_ts.reindex(d_data.index)
+        else:
+            aligned = pd.Series(np.asarray(state_ts), index=d_data.index)
+        state_blocks = _boolean_blocks(
+            d_data.index, aligned.fillna(False).astype(bool).to_numpy()
+        )
 
     if backend == "plotly":
         fig = make_subplots()
@@ -173,6 +233,28 @@ def time_series_hdi(
                 name=f"Quantile {upper_q}",
             )
         )
+        for start, end in state_blocks:
+            fig.add_vrect(
+                x0=start,
+                x1=end,
+                fillcolor=state_color,
+                opacity=state_alpha,
+                line_width=0,
+                layer="below",
+            )
+        if state_blocks:
+            fig.add_trace(
+                go.Scatter(
+                    x=[None],
+                    y=[None],
+                    mode="markers",
+                    marker=dict(
+                        symbol="square", size=12, color=state_color, opacity=state_alpha
+                    ),
+                    name=state_label,
+                )
+            )
+
         fig.update_layout(title=title, xaxis_title="Time", yaxis_title=y_label)
         return fig
 
@@ -201,6 +283,233 @@ def time_series_hdi(
             alpha=0.1,
         )
 
+        for i, (start, end) in enumerate(state_blocks):
+            plt.axvspan(
+                start,
+                end,
+                color=state_color,
+                alpha=state_alpha,
+                zorder=0,
+                label=state_label if i == 0 else None,
+            )
+        if state_blocks:
+            plt.legend()
+
+        plt.ylabel(y_label)
+        plt.title(title)
+        if image_path is not None:
+            plt.savefig(image_path, format="png", bbox_inches="tight")
+        return plt.gcf()
+
+    else:
+        raise ValueError(
+            f"{backend} is an invalid backend argument, choose one of"
+            f"'plotly' or 'matplotlib"
+        )
+
+
+_COMPARISON_PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
+
+
+def time_series_hdi_comparison(
+    measure_ts: pd.Series,
+    predictions: dict[str, np.ndarray | xarray.DataArray],
+    y_label: str = None,
+    title: str = None,
+    lower_q=0.025,
+    upper_q=0.975,
+    upper_cut=None,
+    lower_cut=None,
+    image_path: Path = None,
+    figsize: tuple = (10, 6),
+    backend: str = "plotly",
+    colors: dict[str, str] | list[str] = None,
+    state_ts: pd.Series | np.ndarray = None,
+    state_label: str = "État",
+    state_color: str = "grey",
+    state_alpha: float = 0.15,
+):
+    """
+    Like `time_series_hdi`, but overlays several models' predictions (median +
+    HDI band) against the same observed measure, so they can be compared
+    directly on one time series plot.
+
+    Parameters:
+    - measure_ts (pd.Series): The observed time series data, shared by every
+      model.
+    - predictions (dict[str, np.ndarray | xarray.DataArray]): model name ->
+      prediction array, potentially from multiple chains (same shape
+      conventions as `time_series_hdi`'s `prediction`). Must not be empty.
+    - y_label (str): Label for the y-axis of the plot.
+    - title (str): Title for the plot.
+    - lower_q (float): Lower quantile for the high-density interval (default is 0.025).
+    - upper_q (float): Upper quantile for the high-density interval (default is 0.975).
+    - upper_cut (float): Upper bound for the high-density interval (optional),
+      applied to every model.
+    - lower_cut (float): Lower bound for the high-density interval (optional),
+      applied to every model.
+    - backend (str): switch between a matplotlib or a plotly render
+    - colors (dict[str, str] | list[str], optional): color per model. A dict
+      is keyed by model name; a list is assigned in `predictions` iteration
+      order. Defaults to a 4-color palette, cycled if there are more models
+      than colors.
+    - state_ts (pd.Series | np.ndarray, optional): a boolean or 0/1 time series
+      (e.g. occupancy, alarm) used to shade vertical bands wherever it is
+      True/1 -- nothing is drawn where it is False/0 or missing. If a
+      `pd.Series`, it is reindexed onto `measure_ts`'s index (any position
+      not present, or NaN, is treated as False); otherwise it must have the
+      same length/order as `measure_ts`. A block spanning a single time step
+      is padded +/- half the series' median time step so it stays visible.
+    - state_label (str): legend label for the shaded state bands (default
+      "État").
+    - state_color (str): color used for the shaded state bands (default
+      "grey").
+    - state_alpha (float): opacity of the shaded state bands (default 0.15).
+
+    Returns:
+    - the rendered figure (a `plotly.graph_objs.Figure` or a matplotlib
+      `Figure`, depending on `backend`).
+    """
+    if not predictions:
+        raise ValueError("`predictions` must contain at least one model.")
+
+    model_names = list(predictions.keys())
+    if isinstance(colors, dict):
+        model_colors = {
+            name: colors.get(name, _COMPARISON_PALETTE[i % len(_COMPARISON_PALETTE)])
+            for i, name in enumerate(model_names)
+        }
+    elif colors is not None:
+        model_colors = {
+            name: colors[i % len(colors)] for i, name in enumerate(model_names)
+        }
+    else:
+        model_colors = {
+            name: _COMPARISON_PALETTE[i % len(_COMPARISON_PALETTE)]
+            for i, name in enumerate(model_names)
+        }
+
+    d_data = measure_ts.to_frame()
+    model_quantiles = {
+        name: get_quantiles(prediction, lower_q, upper_q, lower_cut, upper_cut)
+        for name, prediction in predictions.items()
+    }
+
+    state_blocks = []
+    if state_ts is not None:
+        if isinstance(state_ts, pd.Series):
+            aligned = state_ts.reindex(d_data.index)
+        else:
+            aligned = pd.Series(np.asarray(state_ts), index=d_data.index)
+        state_blocks = _boolean_blocks(
+            d_data.index, aligned.fillna(False).astype(bool).to_numpy()
+        )
+
+    if backend == "plotly":
+        fig = make_subplots()
+        fig.add_trace(
+            go.Scatter(
+                x=d_data.index,
+                y=d_data.iloc[:, 0],
+                mode="markers",
+                name="Observed",
+                marker=dict(color="green", size=10),
+                hovertemplate=(
+                    "Date: %{x|%Y-%m-%d %H:%M}<br>"
+                    + (y_label or "Value")
+                    + ": %{y}<extra></extra>"
+                ),
+            )
+        )
+        for name in model_names:
+            color = model_colors[name]
+            low, med, up = model_quantiles[name]
+            fig.add_trace(
+                go.Scatter(
+                    x=d_data.index,
+                    y=med,
+                    mode="lines",
+                    line=dict(color=color),
+                    name=f"{name} — Médiane",
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=list(d_data.index) + list(d_data.index[::-1]),
+                    y=list(up) + list(low[::-1]),
+                    fill="toself",
+                    fillcolor=color,
+                    opacity=0.2,
+                    line=dict(color="rgba(0,0,0,0)"),
+                    hoverinfo="skip",
+                    name=f"{name} — IC {lower_q}-{upper_q}",
+                    showlegend=True,
+                )
+            )
+        for start, end in state_blocks:
+            fig.add_vrect(
+                x0=start,
+                x1=end,
+                fillcolor=state_color,
+                opacity=state_alpha,
+                line_width=0,
+                layer="below",
+            )
+        if state_blocks:
+            fig.add_trace(
+                go.Scatter(
+                    x=[None],
+                    y=[None],
+                    mode="markers",
+                    marker=dict(
+                        symbol="square", size=12, color=state_color, opacity=state_alpha
+                    ),
+                    name=state_label,
+                )
+            )
+
+        fig.update_layout(title=title, xaxis_title="Time", yaxis_title=y_label)
+        return fig
+
+    elif backend == "matplotlib":
+        plt.figure(figsize=figsize)
+        plt.scatter(
+            d_data.index,
+            d_data.iloc[:, 0],
+            color="green",
+            label="Observed",
+            alpha=0.5,
+        )
+
+        for name in model_names:
+            color = model_colors[name]
+            low, med, up = model_quantiles[name]
+            plt.plot(
+                d_data.index,
+                med,
+                color=color,
+                label=f"{name} — Médiane",
+            )
+            plt.fill_between(
+                d_data.index,
+                low,
+                up,
+                color=color,
+                alpha=0.15,
+                label=f"{name} — IC {lower_q}-{upper_q}",
+            )
+
+        for i, (start, end) in enumerate(state_blocks):
+            plt.axvspan(
+                start,
+                end,
+                color=state_color,
+                alpha=state_alpha,
+                zorder=0,
+                label=state_label if i == 0 else None,
+            )
+
+        plt.legend()
         plt.ylabel(y_label)
         plt.title(title)
         if image_path is not None:
