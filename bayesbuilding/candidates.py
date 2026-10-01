@@ -11,7 +11,10 @@ A config file looks like::
           "name": "dt_occ",
           "model": {"mu": "g[occ]*dt - fs[occ]*rad", "sigma": "s0[occ]", "lower": 0.0},
           "inputs": {"dt": "<column>", "rad": "<column>", "occ": "<column>"},
-          "priors": {"g": {"dist": "HalfNormal", "kwargs": {"sigma": 10, "shape": 2}}, ...},
+          "priors": {
+              "g": {"dist": "HalfNormal", "kwargs": {"sigma": 10, "shape": 2}},
+              ...
+          },
           "draws": 4000, "tune": 1000
         }
       ],

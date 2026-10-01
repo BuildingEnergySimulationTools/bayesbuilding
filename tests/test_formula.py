@@ -152,9 +152,9 @@ def test_wrapper_save_load_round_trip_with_formula(toy_data):
         "base": (pm.Normal, {"name": "base", "mu": 15, "sigma": 10, "shape": 2}),
         "sigma": (pm.HalfNormal, {"name": "sigma", "sigma": 3}),
     }
-    model = FormulaModel(
-        mu="g*max(tau - text, 0) + base[occ]", sigma="sigma"
-    ).bind(priors)
+    model = FormulaModel(mu="g*max(tau - text, 0) + base[occ]", sigma="sigma").bind(
+        priors
+    )
     wrapper = PymcWrapper(
         model_function=model,
         priors_dict=priors,

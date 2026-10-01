@@ -1524,7 +1524,9 @@ def plot_candidate_metric_bars(
     by their x position/label, not by color).
     """
     if metric not in comparison.columns:
-        raise KeyError(f"{metric!r} not in comparison columns: {list(comparison.columns)}")
+        raise KeyError(
+            f"{metric!r} not in comparison columns: {list(comparison.columns)}"
+        )
 
     if std_col is None:
         candidate_cols = (
@@ -1537,7 +1539,9 @@ def plot_candidate_metric_bars(
                 f"{candidate_cols}); pass std_col explicitly."
             )
     elif std_col not in comparison.columns:
-        raise KeyError(f"{std_col!r} not in comparison columns: {list(comparison.columns)}")
+        raise KeyError(
+            f"{std_col!r} not in comparison columns: {list(comparison.columns)}"
+        )
 
     ranked = comparison[[metric, std_col]].sort_values(metric, ascending=ascending)
 
@@ -1557,7 +1561,11 @@ def plot_candidate_metric_bars(
         if len(threshold_values) == 2:
             low, high = sorted(threshold_values)
             fig.add_hrect(
-                y0=low, y1=high, fillcolor="rgba(44,160,44,0.08)", line_width=0, layer="below"
+                y0=low,
+                y1=high,
+                fillcolor="rgba(44,160,44,0.08)",
+                line_width=0,
+                layer="below",
             )
         for value in threshold_values:
             fig.add_hline(
@@ -1576,5 +1584,3 @@ def plot_candidate_metric_bars(
         showlegend=False,
     )
     return fig
-
-

@@ -236,7 +236,12 @@ def ewma_control_stats(
 
 
 def cusum_control_stats(
-    y_true: pd.Series, mu_draws, sigma_draws, k: float = 0.5, h: float = 5.0, L: float = 1.96
+    y_true: pd.Series,
+    mu_draws,
+    sigma_draws,
+    k: float = 0.5,
+    h: float = 5.0,
+    L: float = 1.96,
 ) -> dict:
     """Classical two-sided tabular CUSUM (Page) on the standardized residual
     ``z = residual / sigma_hat`` -- same ``mu_hat``/``sigma_hat`` point
@@ -290,7 +295,6 @@ def cusum_control_stats(
         "residual": residual,
         "sigma_hat": sigma_hat,
     }
-
 
 
 def _contiguous_true_runs(mask: np.ndarray) -> list[tuple]:
@@ -429,7 +433,10 @@ def _plot_control_chart(
         align="left",
         xanchor="left",
         yanchor="top",
-        text=f"Points hors contrôle : {n_out}/{len(stat)} ({n_out / len(stat) * 100:.1f}%)",
+        text=(
+            f"Points hors contrôle : {n_out}/{len(stat)} "
+            f"({n_out / len(stat) * 100:.1f}%)"
+        ),
     )
 
     fig.update_layout(
@@ -552,7 +559,9 @@ def plot_cusum_chart(
     :func:`plot_xbar_chart`/:func:`plot_ewma_chart` qui suivent
     ``sigma_hat`` dans les unités brutes du résidu.
     """
-    stats = cusum_control_stats(measure_ts, mu_prediction, sigma_prediction, k=k, h=h, L=L)
+    stats = cusum_control_stats(
+        measure_ts, mu_prediction, sigma_prediction, k=k, h=h, L=L
+    )
     signed = stats["cusum_pos"] - stats["cusum_neg"]
     h_line = np.full_like(signed, stats["h"], dtype=float)
     return _plot_control_chart(

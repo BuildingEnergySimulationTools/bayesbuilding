@@ -23,7 +23,9 @@ def cv_rmse(y_true, y_pred) -> float:
     """Coefficient of Variation of the RMSE [%] (same definition as corrai's,
     i.e. ASHRAE Guideline 14's, with n - 1 degrees of freedom)."""
     n = len(y_true)
-    return float(np.sqrt(np.sum((y_true - y_pred) ** 2) / (n - 1)) / np.mean(y_true) * 100)
+    return float(
+        np.sqrt(np.sum((y_true - y_pred) ** 2) / (n - 1)) / np.mean(y_true) * 100
+    )
 
 
 def mae(y_true, y_pred) -> float:

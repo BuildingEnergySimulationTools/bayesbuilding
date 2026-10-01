@@ -10,7 +10,9 @@ entries: new models are written directly as formulas.
 ``x[:, i]``.
 """
 
-_SETBACK_RAD = "switch(is_heating, base[0] + {g}*max({tau} - text, 0) - fs*rad, base[1])"
+_SETBACK_RAD = (
+    "switch(is_heating, base[0] + {g}*max({tau} - text, 0) - fs*rad, base[1])"
+)
 _DT_CORE = "g[occ]*dt - fs[occ]*rad - alpha[occ]*elec_consumption"
 _WALL = "C*(beta*DTint_dt + (1 - beta)*DText_dt)"
 

@@ -40,7 +40,11 @@ CONFIG_PAYLOAD = {
     "candidates": [
         {
             "name": "dt_change_point",
-            "model": {"mu": "g*max(dt - tau, 0) + base", "sigma": "sigma", "lower": 0.0},
+            "model": {
+                "mu": "g*max(dt - tau, 0) + base",
+                "sigma": "sigma",
+                "lower": 0.0,
+            },
             "inputs": {"dt": "dt__C__Zone__FULL"},
             "priors": PRIORS_DT,
             "prior_draws": 500,
@@ -77,7 +81,9 @@ class TestConfig:
         assert config.get_candidate("text_change_point").model.inputs == ("text",)
 
         config.to_json(tmp_path / "copy.json")
-        assert BayesConfig.from_json(tmp_path / "copy.json").to_dict() == config.to_dict()
+        assert (
+            BayesConfig.from_json(tmp_path / "copy.json").to_dict() == config.to_dict()
+        )
 
     def test_unused_candidates_is_optional(self):
         payload = {k: v for k, v in CONFIG_PAYLOAD.items() if k != "unused_candidates"}
@@ -199,7 +205,10 @@ def test_flatten_regime_vars_explodes_shape_2_regime_variable():
     group = xr.Dataset(
         {
             "sigma": (("chain", "draw"), [[1.0, 2.0, 3.0]]),
-            "g": (("chain", "draw", "g_dim_0"), [[[10.0, 20.0], [11.0, 21.0], [12.0, 22.0]]]),
+            "g": (
+                ("chain", "draw", "g_dim_0"),
+                [[[10.0, 20.0], [11.0, 21.0], [12.0, 22.0]]],
+            ),
         }
     )
     flattened = flatten_regime_vars(group, ["sigma", "g", "does_not_exist"])
@@ -221,7 +230,10 @@ def test_train_candidates_fits_scores_and_records_failures(tmp_path):
     idx = pd.date_range("2024-01-01", periods=70, freq="D")
     dt = rng.uniform(0, 15, 70)
     df = pd.DataFrame(
-        {"dt__C": dt, "energy": 4.0 * np.maximum(dt - 3, 0) + 10 + rng.normal(0, 1, 70)},
+        {
+            "dt__C": dt,
+            "energy": 4.0 * np.maximum(dt - 3, 0) + 10 + rng.normal(0, 1, 70),
+        },
         index=idx,
     )
     priors = {

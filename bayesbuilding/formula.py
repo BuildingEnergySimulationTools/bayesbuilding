@@ -80,12 +80,16 @@ def _check(node: ast.AST, expr: str):
     """Walk ``node`` and raise FormulaError on anything outside the grammar."""
     if isinstance(node, ast.BinOp):
         if type(node.op) not in _BINARY_OPERATORS:
-            raise FormulaError(f"Operator {type(node.op).__name__} not allowed in {expr!r}")
+            raise FormulaError(
+                f"Operator {type(node.op).__name__} not allowed in {expr!r}"
+            )
         _check(node.left, expr)
         _check(node.right, expr)
     elif isinstance(node, ast.UnaryOp):
         if type(node.op) not in _UNARY_OPERATORS:
-            raise FormulaError(f"Operator {type(node.op).__name__} not allowed in {expr!r}")
+            raise FormulaError(
+                f"Operator {type(node.op).__name__} not allowed in {expr!r}"
+            )
         _check(node.operand, expr)
     elif isinstance(node, ast.Constant):
         if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
@@ -144,7 +148,9 @@ def _index_symbols(node: ast.AST) -> set[str]:
     for child in ast.walk(node):
         if isinstance(child, ast.Subscript):
             indices = (
-                child.slice.elts if isinstance(child.slice, ast.Tuple) else [child.slice]
+                child.slice.elts
+                if isinstance(child.slice, ast.Tuple)
+                else [child.slice]
             )
             names |= {i.id for i in indices if isinstance(i, ast.Name)}
     return names
@@ -168,7 +174,9 @@ def _evaluate(node: ast.AST, env: dict, categorical: dict):
             _evaluate(node.right, env, categorical),
         )
     if isinstance(node, ast.UnaryOp):
-        return _UNARY_OPERATORS[type(node.op)](_evaluate(node.operand, env, categorical))
+        return _UNARY_OPERATORS[type(node.op)](
+            _evaluate(node.operand, env, categorical)
+        )
     if isinstance(node, ast.Constant):
         return node.value
     if isinstance(node, ast.Name):
@@ -278,11 +286,11 @@ class FormulaModel:
         return self
 
     def __call__(self, x, variables: dict):
-        inputs = (
-            self.inputs if self.inputs is not None else self.input_names(variables)
-        )
+        inputs = self.inputs if self.inputs is not None else self.input_names(variables)
         missing = [
-            name for name in self.symbols if name not in inputs and name not in variables
+            name
+            for name in self.symbols
+            if name not in inputs and name not in variables
         ]
         if missing:
             raise FormulaError(f"Symbols {missing} are neither priors nor inputs")
@@ -293,7 +301,8 @@ class FormulaModel:
             for name in self.categorical_inputs
         }
         values = {
-            name: _evaluate(tree, env, categorical) for name, tree in self._trees.items()
+            name: _evaluate(tree, env, categorical)
+            for name, tree in self._trees.items()
         }
         mu = values.pop("mu")
         out = {"sigma": values.pop("sigma")}
@@ -315,4 +324,6 @@ class FormulaModel:
         return cls(**spec)
 
     def __repr__(self):
-        return f"FormulaModel(mu={self.mu!r}, sigma={self.sigma!r}, lower={self.lower!r})"
+        return (
+            f"FormulaModel(mu={self.mu!r}, sigma={self.sigma!r}, lower={self.lower!r})"
+        )

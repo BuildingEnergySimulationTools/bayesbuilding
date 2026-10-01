@@ -80,7 +80,6 @@ def test_heating_dt_occ_rad_multiroom_sums_over_rooms():
     np.testing.assert_allclose(mu, expected)
 
 
-
 def test_heating_dt_occ_rad_lag_reheat_surcharge_sign():
     """Direct call (no PyMC) locking down the sign convention for h, worked
     out from the underlying physics (see bayes.py docstring / plan): with a
@@ -110,7 +109,6 @@ def test_heating_dt_occ_rad_lag_reheat_surcharge_sign():
     mu, extras = heating_dt_occ_rad_lag(x, variables_dict)
 
     np.testing.assert_allclose(mu, [1000.0, 1400.0])
-
 
 
 def test_heating_dt_occ_rad_DTdt_lags_capacity_construction():
@@ -147,7 +145,6 @@ def test_heating_dt_occ_rad_DTdt_lags_capacity_construction():
     expected = dt_dt_lags @ c_expected
 
     np.testing.assert_allclose(mu, [expected])
-
 
 
 def test_heating_dt_occ_rad_DTdt_wall_Ci_adds_air_capacity_term():

@@ -116,8 +116,14 @@ def test_ewma_control_stats_confirms_alarm_then_resets_after_transient_event():
     lam, L = 0.5, 1.0
 
     stats = ewma_control_stats(
-        y_true, mu_draws, sigma_draws, lam=lam, L=L,
-        n_confirm=2, n_reset=2, reset_epsilon=0.5,
+        y_true,
+        mu_draws,
+        sigma_draws,
+        lam=lam,
+        L=L,
+        n_confirm=2,
+        n_reset=2,
+        reset_epsilon=0.5,
     )
 
     expected_alarm = [False, False, True, True, True, False, False, False]
@@ -141,8 +147,14 @@ def test_ewma_control_stats_persistent_drift_never_resets():
     y_true = np.array([0.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0])
 
     stats = ewma_control_stats(
-        y_true, mu_draws, sigma_draws, lam=0.5, L=1.0,
-        n_confirm=2, n_reset=2, reset_epsilon=0.5,
+        y_true,
+        mu_draws,
+        sigma_draws,
+        lam=0.5,
+        L=1.0,
+        n_confirm=2,
+        n_reset=2,
+        reset_epsilon=0.5,
     )
 
     assert stats["alarm"][2:].all()
@@ -159,8 +171,14 @@ def test_ewma_control_stats_short_excess_never_confirms_alarm():
     y_true = np.array([0.0, 5.0, 0.0, 0.0, 0.0])
 
     stats = ewma_control_stats(
-        y_true, mu_draws, sigma_draws, lam=0.5, L=1.0,
-        n_confirm=10, n_reset=2, reset_epsilon=0.5,
+        y_true,
+        mu_draws,
+        sigma_draws,
+        lam=0.5,
+        L=1.0,
+        n_confirm=10,
+        n_reset=2,
+        reset_epsilon=0.5,
     )
 
     assert not stats["alarm"].any()
@@ -195,7 +213,8 @@ def test_cusum_control_stats_accumulates_a_sustained_downward_drift():
 
 
 def test_cusum_control_stats_flags_out_of_control_once_h_is_exceeded():
-    # z=2.0, k=0.5 -> cusum_pos grows by 1.5/day: 1.5, 3.0, 4.5, 6.0 -> crosses h=5 on day 4.
+    # z=2.0, k=0.5 -> cusum_pos grows by 1.5/day: 1.5, 3.0, 4.5, 6.0
+    # -> crosses h=5 on day 4.
     mu_draws = np.zeros((1, 4))
     sigma_draws = np.ones((1, 4))
     y_true = np.array([2.0, 2.0, 2.0, 2.0])
@@ -247,20 +266,22 @@ def test_plot_ewma_chart_without_reset_args_has_no_alarm_shading_or_markers():
 
 def test_plot_ewma_chart_with_reset_args_shades_alarm_and_marks_resets():
     index = pd.date_range("2024-01-01", periods=8, freq="D")
-    measure = pd.Series(
-        [0.0, 5.0, 5.0, 5.0, 0.0, 0.0, 0.0, 0.0], index=index
-    )
+    measure = pd.Series([0.0, 5.0, 5.0, 5.0, 0.0, 0.0, 0.0, 0.0], index=index)
     mu_draws = np.zeros((1, 8))
     sigma_draws = np.ones((1, 8))
 
     fig = plot_ewma_chart(
-        measure, mu_draws, sigma_draws, lam=0.5, L=1.0,
-        n_confirm=2, n_reset=2, reset_epsilon=0.5,
+        measure,
+        mu_draws,
+        sigma_draws,
+        lam=0.5,
+        L=1.0,
+        n_confirm=2,
+        n_reset=2,
+        reset_epsilon=0.5,
     )
 
     # the y=0 center line, plus one shaded vrect for the confirmed alarm run
     assert len(fig.layout.shapes) == 2
     reset_trace = next(trace for trace in fig.data if trace.name == "reset EWMA")
     assert list(reset_trace.x) == [index[5]]
-
-
