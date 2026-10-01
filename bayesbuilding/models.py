@@ -87,7 +87,10 @@ def season_cp_heating_es(x, variable_dict):
     baseline = variable_dict["base"]
 
     consumption = g * pm.math.maximum(tau - t_ext, 0)
-    return consumption + baseline, {"sigma": variable_dict["sigma"]}
+    return consumption + baseline, {
+        "sigma": variable_dict["sigma"],
+        "lower": pt.constant(0.0),
+    }
 
 
 def season_cp_heating_es_rad(x, variable_dict):
@@ -122,7 +125,7 @@ def season_cp_heating_es_rad(x, variable_dict):
         is_heating,
         baseline[0] + g * pm.math.maximum(tau - t_ext, 0) - fs * rad,
         baseline[1],
-    ), {"sigma": variable_dict["sigma"]}
+    ), {"sigma": variable_dict["sigma"], "lower": pt.constant(0.0)}
 
 
 def season_cp_heating_es_setback(x, variable_dict):
@@ -152,7 +155,7 @@ def season_cp_heating_es_setback(x, variable_dict):
         is_heating,
         baseline[0] + g * pm.math.maximum(tau - t_ext, 0),
         baseline[1],
-    ), {"sigma": variable_dict["sigma"]}
+    ), {"sigma": variable_dict["sigma"], "lower": pt.constant(0.0)}
 
 
 def season_cp_heating_es_rad_g_by_period(x, variable_dict):
@@ -189,7 +192,7 @@ def season_cp_heating_es_rad_g_by_period(x, variable_dict):
         is_heating,
         baseline[0] + g[period] * pm.math.maximum(tau - t_ext, 0) - fs * rad,
         baseline[1],
-    ), {"sigma": variable_dict["sigma"]}
+    ), {"sigma": variable_dict["sigma"], "lower": pt.constant(0.0)}
 
 
 def season_cp_heating_es_rad_tau_by_period(x, variable_dict):
@@ -223,7 +226,7 @@ def season_cp_heating_es_rad_tau_by_period(x, variable_dict):
         is_heating,
         baseline[0] + g * pm.math.maximum(tau[period] - t_ext, 0) - fs * rad,
         baseline[1],
-    ), {"sigma": variable_dict["sigma"]}
+    ), {"sigma": variable_dict["sigma"], "lower": pt.constant(0.0)}
 
 
 def season_cp_heating_es_rad_base_by_period(x, variable_dict):
@@ -258,7 +261,7 @@ def season_cp_heating_es_rad_base_by_period(x, variable_dict):
         is_heating,
         baseline + g * pm.math.maximum(tau - t_ext, 0) - fs * rad,
         baseline,
-    ), {"sigma": variable_dict["sigma"]}
+    ), {"sigma": variable_dict["sigma"], "lower": pt.constant(0.0)}
 
 
 def season_cp_heating_es_rad_g_tau_by_period(x, variable_dict):
@@ -298,7 +301,7 @@ def season_cp_heating_es_rad_g_tau_by_period(x, variable_dict):
         is_heating,
         baseline[0] + g[period] * pm.math.maximum(tau[period] - t_ext, 0) - fs * rad,
         baseline[1],
-    ), {"sigma": variable_dict["sigma"]}
+    ), {"sigma": variable_dict["sigma"], "lower": pt.constant(0.0)}
 
 
 def heating_es_dju(x, variable_dict):
@@ -327,7 +330,10 @@ def heating_es_dju(x, variable_dict):
     baseline = variable_dict["base"]
 
     consumption = g * dju
-    return consumption + baseline, {"sigma": variable_dict["sigma"]}
+    return consumption + baseline, {
+        "sigma": variable_dict["sigma"],
+        "lower": pt.constant(0.0),
+    }
 
 
 def heating_es_dju_rad(x, variable_dict):
@@ -357,7 +363,10 @@ def heating_es_dju_rad(x, variable_dict):
     fs = variable_dict["fs"]
     baseline = variable_dict["base"]
 
-    return baseline + g * dju - fs * rad, {"sigma": variable_dict["sigma"]}
+    return baseline + g * dju - fs * rad, {
+        "sigma": variable_dict["sigma"],
+        "lower": pt.constant(0.0),
+    }
 
 
 def heating_es_dju_rad_occ(x, variable_dict):
@@ -389,7 +398,8 @@ def heating_es_dju_rad_occ(x, variable_dict):
     baseline = variable_dict["base"]
 
     return baseline[occ] + g[occ] * dju - fs[occ] * rad, {
-        "sigma": variable_dict["sigma"]
+        "sigma": variable_dict["sigma"],
+        "lower": pt.constant(0.0),
     }
 
 
@@ -425,7 +435,8 @@ def heating_es_dju_rad_occ_setback(x, variable_dict):
     base = variable_dict["base"]
 
     return pm.math.switch(occ, base[0] + g * dju - fs * rad, base[1]), {
-        "sigma": variable_dict["sigma"]
+        "sigma": variable_dict["sigma"],
+        "lower": pt.constant(0.0),
     }
 
 
@@ -451,7 +462,10 @@ def season_cp_heating_es_dt(x, variable_dict):
     baseline = variable_dict["base"]
 
     consumption = g * pm.math.maximum(dt - tau, 0)
-    return consumption + baseline, {"sigma": variable_dict["sigma"]}
+    return consumption + baseline, {
+        "sigma": variable_dict["sigma"],
+        "lower": pt.constant(0.0),
+    }
 
 
 def season_cp_occ_cp_es_dt(x, variable_dict):
@@ -478,7 +492,11 @@ def season_cp_occ_cp_es_dt(x, variable_dict):
     baseline = variable_dict["baseline"]
 
     consumption = g[occ] * pm.math.maximum(dt - tau[occ], 0)
-    return consumption + baseline[occ], {"sigma": variable_dict["sigma"]}
+    # sigma is computed by state here (replaces the removed
+    # sigma_change_point_idx wrapper mechanism): the prior declares "sigma"
+    # with shape n_occupation_states, and this model indexes it itself.
+    sigma = variable_dict["sigma"][occ]
+    return consumption + baseline[occ], {"sigma": sigma, "lower": pt.constant(0.0)}
 
 
 def season_cp_occ_cp_heating_es(x, variable_dict):
@@ -505,7 +523,11 @@ def season_cp_occ_cp_heating_es(x, variable_dict):
     baseline = variable_dict["baseline"]
 
     consumption = g[occ] * pm.math.maximum(tau[occ] - t_ext, 0)
-    return consumption + baseline[occ], {"sigma": variable_dict["sigma"]}
+    # sigma is computed by state here (replaces the removed
+    # sigma_change_point_idx wrapper mechanism): the prior declares "sigma"
+    # with shape n_occupation_states, and this model indexes it itself.
+    sigma = variable_dict["sigma"][occ]
+    return consumption + baseline[occ], {"sigma": sigma, "lower": pt.constant(0.0)}
 
 
 def we_cst_wd_radiation_lighting(x, variable_dict):
@@ -625,9 +647,372 @@ def heating_cp_occ_rad(x, variables_dict: dict):
 
     w = pm.math.sigmoid((tau[occupation] - t_ext) / 1.5)
 
-    sigma = pt.sqrt(s0**2 + (s1 * w) ** 2)
+    sigma = pt.sqrt(s0[occupation] ** 2 + (s1 * w) ** 2)
 
-    return baseline + heat, {"sigma": sigma}
+    return baseline + heat, {"sigma": sigma, "lower": pt.constant(0.0)}
+
+
+def heating_dt_occ_rad(x, variables_dict: dict):
+    """
+    Consumption driven directly by the indoor/outdoor delta-T (dt = tin - text,
+    no changepoint/floor here since dt is already ~0 or negative outside the
+    heating season), net of solar gains (fs * rad) and of a fraction (alpha) of
+    metered electrical consumption (a proxy for internal/appliance heat gains
+    offsetting the heating load), per-occupation.
+
+    The likelihood scale is a per-occupation noise floor: sigma = s0[occupation].
+    "sigma" is a reserved key in the returned extras dict: PymcWrapper.build_model
+    uses it in place of variables_dict["sigma"] whenever a model_function
+    provides it (see its docstring).
+
+    Returns (mu, extras) with extras = {"sigma": ...}.
+    """
+    dt = x[:, 0]
+    rad = x[:, 1]
+    elec_consumption = x[:, 2]
+    occupation = x[:, 3].astype(int)
+
+    g = variables_dict["g"]
+    fs = variables_dict["fs"]
+    alpha = variables_dict["alpha"]
+
+    s0 = variables_dict["s0"]
+
+    mu = (
+            g[occupation] * dt
+            - fs[occupation] * rad
+            - alpha[occupation] * elec_consumption
+    )
+
+    sigma = s0[occupation]
+
+    return mu, {"sigma": sigma, "lower": pt.constant(0.0)}
+
+
+def heating_dt_occ_rad_multiroom(x, variables_dict: dict):
+    """
+    Same as heating_dt_occ_rad, but the building is split into rooms each with
+    their own indoor/outdoor delta-T and their own heat-loss (g) and solar-gain
+    (fs) response, summed to reconstruct the whole-building heating consumption.
+    fs varies by room because rooms have different orientation/window exposure
+    even though the outdoor radiation `rad` they all see is the same signal.
+    alpha stays shared (only occupation-indexed) since elec_consumption is a
+    whole-building electrical measurement with no per-room signal.
+
+    The likelihood scale is a per-occupation noise floor: sigma = s0[occupation].
+    "sigma" is a reserved key in the returned extras dict: PymcWrapper.build_model
+    uses it in place of variables_dict["sigma"] whenever a model_function
+    provides it (see its docstring).
+
+    :param x: (n_room + 3)-column 2D array. x[:, :-3] are the n_room per-room
+        dt columns (tin_room - text), x[:, -3] is solar radiation, x[:, -2] is
+        metered electrical consumption, x[:, -1] is the occupation flag.
+    :param variables_dict: mandatory model variables are "g" and "fs" (shape
+        (n_occ, n_room)) and "alpha"/"s0" (shape (n_occ,)).
+    :return: (mu, extras) with extras = {"sigma": ...}.
+    """
+    dt = x[:, :-3]
+    rad = x[:, -3]
+    elec_consumption = x[:, -2]
+    occupation = x[:, -1].astype(int)
+
+    g = variables_dict["g"]
+    fs = variables_dict["fs"]
+    alpha = variables_dict["alpha"]
+
+    s0 = variables_dict["s0"]
+
+    heating_by_room = g[occupation] * dt - fs[occupation] * rad[:, None]
+    mu = heating_by_room.sum(axis=1) - alpha[occupation] * elec_consumption
+
+    sigma = s0[occupation]
+
+    return mu, {"sigma": sigma, "lower": pt.constant(0.0)}
+
+
+def heating_dt_occ_rad_lag(x, variables_dict: dict):
+    """
+    Same as heating_dt_occ_rad, plus a term on dt lagged by one day (dt_lag)
+    to capture the "reheat" transient right after an unoccupied -> occupied
+    setback recovery: the building must also recharge its thermal mass, on
+    top of covering the current day's dt. h is expected negative: physically,
+    h = -(C/dt_step) where C is the building's thermal capacitance -- a low
+    dt_lag (coming out of an economy setback) combined with h<0 adds the
+    extra "recharge" energy on top of g*dt, while on a stable day (dt_lag ~=
+    dt) the h term nets out close to what g*dt alone already represents.
+
+    The likelihood scale is a per-occupation noise floor: sigma = s0[occupation].
+    "sigma" is a reserved key in the returned extras dict: PymcWrapper.build_model
+    uses it in place of variables_dict["sigma"] whenever a model_function
+    provides it (see its docstring).
+
+    :param x: 5-column 2D array. x[:, 0] is dt, x[:, 1] is solar radiation,
+        x[:, 2] is metered electrical consumption, x[:, 3] is the occupation
+        flag, x[:, 4] is dt lagged by one day.
+    :param variables_dict: "g", "fs", "alpha", "h", "s0" all shape (n_occ,).
+    :return: (mu, extras) with extras = {"sigma": ...}.
+    """
+    dt = x[:, 0]
+    rad = x[:, 1]
+    elec_consumption = x[:, 2]
+    occupation = x[:, 3].astype(int)
+    dt_lag = x[:, 4]
+
+    g = variables_dict["g"]
+    fs = variables_dict["fs"]
+    alpha = variables_dict["alpha"]
+    h = variables_dict["h"]
+    s0 = variables_dict["s0"]
+
+    mu = (
+        g[occupation] * dt
+        + h[occupation] * dt_lag
+        - fs[occupation] * rad
+        - alpha[occupation] * elec_consumption
+    )
+
+    sigma = s0[occupation]
+
+    return mu, {"sigma": sigma, "lower": pt.constant(0.0)}
+
+def heating_dt_occ_rad_DTdt(x, variables_dict: dict):
+    """
+    Same as heating_dt_occ_rad, plus a capacitive term c * DT_dt, the
+    discretized C*dTint/dt term of the classical RC heat-balance equation
+    (Q = UA*dt + C*dTint/dt - solar - internal gains): DT_dt is the (daily
+    mean of the) centered numerical derivative of indoor temperature, and c
+    is a single scalar capacity-like coefficient shared across occupation
+    regimes, capturing the energy stored in/released from the building's
+    thermal mass as the indoor temperature rises/falls, on top of the
+    steady-state conduction loss g*dt.
+
+    The likelihood scale is a per-occupation noise floor: sigma = s0[occupation].
+    "sigma" is a reserved key in the returned extras dict: PymcWrapper.build_model
+    uses it in place of variables_dict["sigma"] whenever a model_function
+    provides it (see its docstring).
+
+    :param x: 5-column 2D array. x[:, 0] is dt, x[:, 1] is solar radiation,
+        x[:, 2] is metered electrical consumption, x[:, 3] is the occupation
+        flag, x[:, 4] is DT_dt (dTint/dt).
+    :param variables_dict: "g", "fs", "alpha", "s0" shape (n_occ,); "c" scalar.
+    :return: (mu, extras) with extras = {"sigma": ...}.
+    """
+    dt = x[:, 0]
+    rad = x[:, 1]
+    elec_consumption = x[:, 2]
+    occupation = x[:, 3].astype(int)
+    DT_dt = x[:, 4]
+
+    g = variables_dict["g"]
+    fs = variables_dict["fs"]
+    alpha = variables_dict["alpha"]
+    c = variables_dict["c"]
+    s0 = variables_dict["s0"]
+
+    mu = (
+        g[occupation] * dt
+        + c * DT_dt
+        - fs[occupation] * rad
+        - alpha[occupation] * elec_consumption
+    )
+
+    sigma = s0[occupation]
+
+    return mu, {"sigma": sigma, "lower": pt.constant(0.0)}
+
+
+def heating_dt_occ_rad_DTdt_lags(x, variables_dict: dict):
+    """
+    Same as heating_dt_occ_rad_DTdt, but the capacitive term is a short
+    distributed lag on DT_dt (today + 1..3 days back) instead of a single
+    coefficient on today's value, to approximate a higher-order
+    (multi-capacitance) thermal-mass response instead of a single-exponential
+    one. The per-lag coefficients follow a geometric decay c_k = c0 * rho**k
+    (k=0..3): c0 > 0 is today's capacity coefficient, rho in (0, 1) is the
+    fraction of one day's capacitive contribution still present the next day
+    (an implied memory half-life = ln(0.5) / ln(rho) days). Since c0 > 0 and
+    0 < rho < 1, every c_k is guaranteed positive and monotonically
+    decaying -- an earlier version built c_k as c0 plus a cumulative sum of
+    unconstrained increments (a random walk), which let a higher lag's
+    coefficient cross to negative in the fit, an unphysical sign flip for
+    what should be a monotonically fading capacitive effect. The single
+    shared decay rate also pools information across all 4 lags instead of
+    estimating 3 independent step differences, which were poorly identified
+    given how autocorrelated consecutive daily DT_dt values are.
+
+    The likelihood scale is a per-occupation noise floor: sigma = s0[occupation].
+    "sigma" is a reserved key in the returned extras dict: PymcWrapper.build_model
+    uses it in place of variables_dict["sigma"] whenever a model_function
+    provides it (see its docstring).
+
+    :param x: 8-column 2D array. x[:, 0] is dt, x[:, 1] is solar radiation,
+        x[:, 2] is metered electrical consumption, x[:, 3] is the occupation
+        flag, x[:, 4] is DT_dt at lag 0 (today), x[:, 5:8] are DT_dt at lag
+        1, 2, 3 days.
+    :param variables_dict: "g", "fs", "alpha", "s0" shape (n_occ,); "c0"
+        scalar (> 0); "rho" scalar in (0, 1) (geometric decay rate).
+    :return: (mu, extras) with extras = {"sigma": ..., "lower": ...}.
+    """
+    dt = x[:, 0]
+    rad = x[:, 1]
+    elec_consumption = x[:, 2]
+    occupation = x[:, 3].astype(int)
+    DT_dt = x[:, 4]
+    DT_dt_lag1 = x[:, 5]
+    DT_dt_lag2 = x[:, 6]
+    DT_dt_lag3 = x[:, 7]
+
+    g = variables_dict["g"]
+    fs = variables_dict["fs"]
+    alpha = variables_dict["alpha"]
+    c0 = variables_dict["c0"]
+    rho = variables_dict["rho"]
+    s0 = variables_dict["s0"]
+
+    c1 = c0 * rho
+    c2 = c1 * rho
+    c3 = c2 * rho
+    capacity_term = c0 * DT_dt + c1 * DT_dt_lag1 + c2 * DT_dt_lag2 + c3 * DT_dt_lag3
+
+    mu = (
+        g[occupation] * dt
+        + capacity_term
+        - fs[occupation] * rad
+        - alpha[occupation] * elec_consumption
+    )
+
+    sigma = s0[occupation]
+
+    return mu, {"sigma": sigma, "lower": pt.constant(0.0)}
+
+
+def heating_dt_occ_rad_DTdt_wall_Ci(x, variables_dict: dict):
+    """
+    Same as heating_dt_occ_rad_DTdt_wall, but adds a second capacitive term on
+    the indoor-air node itself: Ci * (Tin_23:00 - Tin_00:00), the intraday
+    swing of indoor temperature (approximating Ci * integral(dTint/dt) over
+    the day), in addition to the existing lumped-wall/mass term C * (beta*
+    DTint_dt + (1-beta)*DText_dt). Ci is a single scalar shared across
+    occupied/unoccupied regimes (unlike g/fs/alpha).
+
+    :param x: 7-column 2D array. x[:, 0] is dt, x[:, 1] is solar radiation,
+        x[:, 2] is metered electrical consumption, x[:, 3] is the occupation
+        flag, x[:, 4] is DTint_dt (day-to-day drift of daily-mean Tint),
+        x[:, 5] is DText_dt (day-to-day drift of daily-mean Text), x[:, 6] is
+        DTint_intraday (today's Tin at end of day minus Tin at start of day).
+    :param variables_dict: "g", "fs", "alpha", "s0" shape (n_occ,); "C",
+        "beta", "Ci" scalars ("C" >= 0, "beta" in (0, 1), "Ci" >= 0).
+    :return: (mu, extras) with extras = {"sigma": ..., "lower": ...}.
+    """
+    dt = x[:, 0]
+    rad = x[:, 1]
+    elec_consumption = x[:, 2]
+    occupation = x[:, 3].astype(int)
+    DTint_dt = x[:, 4]
+    DText_dt = x[:, 5]
+    DTint_intraday = x[:, 6]
+
+    g = variables_dict["g"]
+    fs = variables_dict["fs"]
+    alpha = variables_dict["alpha"]
+    C = variables_dict["C"]
+    beta = variables_dict["beta"]
+    Ci = variables_dict["Ci"]
+    s0 = variables_dict["s0"]
+
+    wall_capacity_term = C * (beta * DTint_dt + (1 - beta) * DText_dt)
+    air_capacity_term = Ci * DTint_intraday
+
+    mu = (
+        g[occupation] * dt
+        + wall_capacity_term
+        + air_capacity_term
+        - fs[occupation] * rad
+        - alpha[occupation] * elec_consumption
+    )
+
+    sigma = s0[occupation]
+
+    return mu, {"sigma": sigma, "lower": pt.constant(0.0)}
+
+
+def heating_dt_occ_rad_DTdt_wall_Ci_radlag(x, variables_dict: dict):
+    """
+    Same as heating_dt_occ_rad_DTdt_wall_Ci, plus a delayed solar gain term
+    fm * rad_lag1: yesterday's solar radiation, stored in the thermal mass
+    and released today, further reduces today's heating need. fm is
+    per-occupation, like fs.
+
+    :param x: 8-column 2D array. Columns 0-6 as in
+        heating_dt_occ_rad_DTdt_wall_Ci, x[:, 7] is rad_lag1 (previous day's
+        solar radiation).
+    :param variables_dict: as heating_dt_occ_rad_DTdt_wall_Ci, plus "fm"
+        shape (n_occ,) (>= 0).
+    :return: (mu, extras) with extras = {"sigma": ..., "lower": ...}.
+    """
+    mu, extras = heating_dt_occ_rad_DTdt_wall_Ci(x[:, :7], variables_dict)
+    occupation = x[:, 3].astype(int)
+    rad_lag1 = x[:, 7]
+
+    mu = mu - variables_dict["fm"][occupation] * rad_lag1
+
+    return mu, extras
+
+
+def heating_dt_occ_rad_DTdt_wall(x, variables_dict: dict):
+    """
+    Same as heating_dt_occ_rad_DTdt, but the capacitive term approximates a
+    single lumped wall/thermal-mass node instead of using indoor temperature
+    directly: the wall temperature is modeled as a quasi-static linear blend
+    of the two known boundary temperatures, T_wall ~= beta*Tint + (1-beta)*Text,
+    and the capacitive term is C * d(T_wall)/dt, discretized as the
+    day-to-day drift of that blend: C * (beta*DTint_dt + (1-beta)*DText_dt),
+    where DTint_dt/DText_dt are each the one-day-lagged difference of the
+    daily-mean indoor/outdoor temperature (today's daily mean minus
+    yesterday's). beta in (0, 1) locates the wall thermally: close to 1 means
+    the modeled mass behaves like the indoor air (mass on the inside of the
+    insulation), close to 0 means it tracks outdoor conditions (mass outside
+    the insulation / lightly insulated envelope).
+
+    The likelihood scale is a per-occupation noise floor: sigma = s0[occupation].
+    "sigma" is a reserved key in the returned extras dict: PymcWrapper.build_model
+    uses it in place of variables_dict["sigma"] whenever a model_function
+    provides it (see its docstring).
+
+    :param x: 6-column 2D array. x[:, 0] is dt, x[:, 1] is solar radiation,
+        x[:, 2] is metered electrical consumption, x[:, 3] is the occupation
+        flag, x[:, 4] is DTint_dt (day-to-day drift of daily-mean Tint),
+        x[:, 5] is DText_dt (day-to-day drift of daily-mean Text).
+    :param variables_dict: "g", "fs", "alpha", "s0" shape (n_occ,); "C"
+        scalar (>= 0); "beta" scalar in (0, 1) (indoor/outdoor blend weight).
+    :return: (mu, extras) with extras = {"sigma": ..., "lower": ...}.
+    """
+    dt = x[:, 0]
+    rad = x[:, 1]
+    elec_consumption = x[:, 2]
+    occupation = x[:, 3].astype(int)
+    DTint_dt = x[:, 4]
+    DText_dt = x[:, 5]
+
+    g = variables_dict["g"]
+    fs = variables_dict["fs"]
+    alpha = variables_dict["alpha"]
+    C = variables_dict["C"]
+    beta = variables_dict["beta"]
+    s0 = variables_dict["s0"]
+
+    capacity_term = C * (beta * DTint_dt + (1 - beta) * DText_dt)
+
+    mu = (
+        g[occupation] * dt
+        + capacity_term
+        - fs[occupation] * rad
+        - alpha[occupation] * elec_consumption
+    )
+
+    sigma = s0[occupation]
+
+    return mu, {"sigma": sigma, "lower": pt.constant(0.0)}
 
 
 def ppv_projected_rad_cst_eff(x, variables_dict: dict):
