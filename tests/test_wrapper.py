@@ -9,7 +9,7 @@ import pytest
 
 from bayesbuilding.models import season_cp_heating_es
 from bayesbuilding.plotting import time_series_hdi, changepoint_graph
-from bayesbuilding.wrapper import PymcWrapper, _resample_samples
+from bayesbuilding.wrapper import PymcWrapper, resample_samples
 
 IMAGE_TEST_PATH = Path(tempfile.mkdtemp()) / "image.png"
 
@@ -64,7 +64,7 @@ class TestResampleSamples:
         )  # 2 samples, constant per day
         y = pd.Series(np.arange(1, 15, dtype=float), index=index)
 
-        resampled_trace, resampled_y = _resample_samples(
+        resampled_trace, resampled_y = resample_samples(
             flattened_trace, y, resample_rule="W"
         )
 
