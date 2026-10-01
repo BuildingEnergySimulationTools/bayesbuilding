@@ -1,12 +1,16 @@
 import numpy as np
 import pandas as pd
+import pytest
 import xarray
 
 from bayesbuilding.plotting import (
+    _boolean_blocks,
     _flatten_chains,
     get_cumulative_quantiles,
     plot_cumulative_energy_hdi,
     plot_cumulative_gap_hdi,
+    time_series_hdi,
+    time_series_hdi_comparison,
 )
 
 
@@ -141,3 +145,144 @@ class TestPlotCumulativeGapHdi:
         np.testing.assert_allclose(band_low, expected_gap_low)
         np.testing.assert_allclose(gap_med, expected_gap_med)
         np.testing.assert_allclose(band_up, expected_gap_up)
+
+
+class TestBooleanBlocks:
+    def _daily_index(self, n=10):
+        return pd.date_range("2023-01-01", periods=n, freq="D")
+
+    def test_all_false_returns_no_blocks(self):
+        index = self._daily_index()
+        mask = np.zeros(10, dtype=bool)
+        assert _boolean_blocks(index, mask) == []
+
+    def test_single_run_becomes_one_block(self):
+        index = self._daily_index()
+        mask = np.array([0, 0, 1, 1, 1, 0, 0, 0, 0, 0], dtype=bool)
+        blocks = _boolean_blocks(index, mask)
+        assert blocks == [(index[2], index[4])]
+
+    def test_two_runs_become_two_blocks(self):
+        index = self._daily_index()
+        mask = np.array([1, 1, 0, 0, 0, 1, 1, 0, 0, 0], dtype=bool)
+        blocks = _boolean_blocks(index, mask)
+        assert blocks == [(index[0], index[1]), (index[5], index[6])]
+
+    def test_isolated_point_is_padded_by_half_median_step(self):
+        index = self._daily_index()
+        mask = np.array([0, 0, 0, 1, 0, 0, 0, 0, 0, 0], dtype=bool)
+        [(start, end)] = _boolean_blocks(index, mask)
+        half_step = pd.Timedelta("12h")
+        assert start == index[3] - half_step
+        assert end == index[3] + half_step
+
+
+class TestTimeSeriesHdiStateOverlay:
+    def _sample_data(self):
+        rng = np.random.default_rng(3)
+        index = pd.date_range("2023-01-01", periods=10, freq="D")
+        measure = pd.Series(rng.random(10) * 100, index=index)
+        prediction = rng.random((2, 100, 10)) * 100  # chain, draw, time
+        state = pd.Series([0, 0, 1, 1, 0, 0, 0, 1, 0, 0], index=index)
+        return measure, prediction, state
+
+    def test_plotly_backend_with_state(self):
+        measure, prediction, state = self._sample_data()
+        fig = time_series_hdi(
+            measure, prediction, state_ts=state, backend="plotly"
+        )
+        assert fig is not None
+
+    def test_matplotlib_backend_with_state(self, tmp_path):
+        measure, prediction, state = self._sample_data()
+        fig = time_series_hdi(
+            measure,
+            prediction,
+            state_ts=state,
+            backend="matplotlib",
+            image_path=tmp_path / "state.png",
+        )
+        assert fig is not None
+        assert (tmp_path / "state.png").exists()
+
+    def test_without_state_ts_still_works(self):
+        measure, prediction, _ = self._sample_data()
+        fig = time_series_hdi(measure, prediction, backend="plotly")
+        assert fig is not None
+
+
+class TestTimeSeriesHdiComparison:
+    def _sample_data(self):
+        rng = np.random.default_rng(4)
+        index = pd.date_range("2023-01-01", periods=10, freq="D")
+        measure = pd.Series(rng.random(10) * 100, index=index)
+        predictions = {
+            "modele_a": rng.random((2, 100, 10)) * 100,  # chain, draw, time
+            "modele_b": rng.random((2, 100, 10)) * 100,
+        }
+        state = pd.Series([0, 0, 1, 1, 0, 0, 0, 1, 0, 0], index=index)
+        return measure, predictions, state
+
+    def test_plotly_backend_trace_count(self):
+        measure, predictions, _ = self._sample_data()
+        fig = time_series_hdi_comparison(measure, predictions, backend="plotly")
+        assert fig is not None
+        # 1 observed + 2 traces per model (median line + HDI band), no state
+        assert len(fig.data) == 1 + 2 * len(predictions)
+
+    def test_matplotlib_backend_line_count(self, tmp_path):
+        measure, predictions, _ = self._sample_data()
+        fig = time_series_hdi_comparison(
+            measure,
+            predictions,
+            backend="matplotlib",
+            image_path=tmp_path / "comparison.png",
+        )
+        assert fig is not None
+        assert (tmp_path / "comparison.png").exists()
+        ax = fig.axes[0]
+        # one median line per model (fill_between doesn't add to ax.lines)
+        assert len(ax.lines) == len(predictions)
+
+    def test_plotly_backend_with_state_shading(self):
+        measure, predictions, state = self._sample_data()
+        fig = time_series_hdi_comparison(
+            measure, predictions, state_ts=state, backend="plotly"
+        )
+        assert len(fig.layout.shapes) >= 1
+        assert any(trace.name == "État" for trace in fig.data)
+
+    def test_matplotlib_backend_with_state_shading(self):
+        measure, predictions, state = self._sample_data()
+        fig = time_series_hdi_comparison(
+            measure, predictions, state_ts=state, backend="matplotlib"
+        )
+        ax = fig.axes[0]
+        assert len(ax.patches) >= 1
+
+    def test_without_state_ts_still_works(self):
+        measure, predictions, _ = self._sample_data()
+        fig = time_series_hdi_comparison(measure, predictions, backend="plotly")
+        assert fig is not None
+        assert len(fig.layout.shapes) == 0
+
+    def test_custom_colors_dict(self):
+        measure, predictions, _ = self._sample_data()
+        fig = time_series_hdi_comparison(
+            measure,
+            predictions,
+            backend="plotly",
+            colors={"modele_a": "black", "modele_b": "purple"},
+        )
+        median_traces = [t for t in fig.data if "Médiane" in (t.name or "")]
+        assert {t.line.color for t in median_traces} == {"black", "purple"}
+
+    def test_empty_predictions_raises(self):
+        measure, _, _ = self._sample_data()
+        with pytest.raises(ValueError):
+            time_series_hdi_comparison(measure, {}, backend="plotly")
+
+    def test_invalid_backend_raises(self):
+        measure, predictions, _ = self._sample_data()
+        with pytest.raises(ValueError):
+            time_series_hdi_comparison(measure, predictions, backend="bokeh")
