@@ -5,10 +5,25 @@ PymcWrapper` built from plain-text expressions, so that a new model variant is
 a line of JSON rather than a new function in :mod:`bayesbuilding.models`::
 
     FormulaModel(
+        likelihood="TruncatedNormal",
         mu="g[occ]*dt - fs[occ]*rad + C*(beta*DTint_dt + (1-beta)*DText_dt)",
-        sigma="s0[occ]",
-        lower=0.0,
+        params={"sigma": "s0[occ]", "lower": 0.0},
     )
+
+Likelihood
+----------
+``likelihood`` names the PyMC distribution of the observations (``Normal``,
+``TruncatedNormal``, ``StudentT``...). ``mu`` is its mean and ``params`` holds
+every other argument the distribution takes: each value is a formula or a
+number, e.g. ``{"sigma": "s0[occ]", "nu": 4}`` for a ``StudentT``. With a
+``TruncatedNormal``, ``lower`` is the truncation bound: the observations are
+``Normal(mu, sigma)`` restricted to ``[lower, +inf)`` and renormalized (an energy
+consumption cannot be negative).
+
+The older form ``FormulaModel(mu, sigma, lower=0.0)``, without ``likelihood``
+and ``params``, is still accepted: it means ``TruncatedNormal`` with
+``params={"sigma": sigma, "lower": lower}``, or ``Normal`` with
+``params={"sigma": sigma}`` when ``lower`` is None.
 
 Grammar
 -------
@@ -19,7 +34,7 @@ Grammar
   are not priors. Their order -- the column order of ``x`` -- is: continuous
   drivers first, then categorical inputs (used as an index or as a
   ``switch`` condition), each group in order of first appearance across
-  ``mu``, ``sigma`` and ``extras``. So ``x[:, 0]`` is the main driver, e.g.
+  ``mu``, ``params`` and ``extras``. So ``x[:, 0]`` is the main driver, e.g.
   ``dt`` in ``g[occ]*dt - fs[occ]*rad`` -> ``(dt, rad, occ)``. Pass
   ``inputs`` explicitly to force another order.
 - Indexing: ``g[occ]`` or ``g[occ, 1]`` indexes a vector/matrix prior by a
@@ -33,6 +48,7 @@ walked against a whitelist, never passed to ``eval``.
 """
 
 import ast
+import inspect
 import warnings
 
 import pymc as pm
@@ -65,6 +81,35 @@ _UNARY_OPERATORS = {
 
 class FormulaError(ValueError):
     """Raised when a formula uses a construct outside the allowed grammar."""
+
+
+_UNSET = object()
+
+
+def _likelihood_dist(name: str):
+    """The PyMC distribution class named ``name`` (e.g. ``"TruncatedNormal"``)."""
+    dist = getattr(pm, name, None) if isinstance(name, str) else None
+    if not (isinstance(dist, type) and issubclass(dist, pm.Distribution)):
+        raise FormulaError(f"Unknown PyMC likelihood distribution {name!r}")
+    return dist
+
+
+def _check_params(likelihood: str, params: dict):
+    """Raise FormulaError if ``params`` doesn't fit the ``likelihood`` signature."""
+    if "mu" in params:
+        raise FormulaError("'mu' is given by the mu formula, not in params")
+    accepted = set(inspect.signature(_likelihood_dist(likelihood).dist).parameters)
+    unknown = sorted(set(params) - accepted)
+    if unknown:
+        raise FormulaError(
+            f"{likelihood} does not accept the parameters {unknown}. "
+            f"Accepted: {sorted(accepted - {'mu', 'args', 'kwargs'})}"
+        )
+    for name, value in params.items():
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            raise FormulaError(
+                f"Parameter {name!r} must be a formula or a number, got {value!r}"
+            )
 
 
 def _parse(expr: str) -> ast.expr:
@@ -198,9 +243,16 @@ class FormulaModel:
     """A PymcWrapper ``model_function`` defined by text formulas.
 
     :param mu: expression of the likelihood mean.
-    :param sigma: expression of the likelihood scale.
-    :param lower: lower truncation bound returned as the ``"lower"`` extra
-        (for a ``TruncatedNormal`` likelihood); ``None`` returns no ``"lower"``.
+    :param likelihood: name of the PyMC distribution of the observations, e.g.
+        ``"TruncatedNormal"``. Inferred from ``params`` when omitted:
+        ``"TruncatedNormal"`` if it has a ``lower``, else ``"Normal"``.
+    :param params: the likelihood's other arguments, ``{name: formula or
+        number}``, e.g. ``{"sigma": "s0[occ]", "lower": 0.0}``.
+    :param sigma: older form, instead of ``params``: expression of the
+        likelihood scale.
+    :param lower: older form, instead of ``params``: truncation bound of a
+        ``TruncatedNormal`` likelihood (default ``0.0``); ``None`` means a plain
+        ``Normal``.
     :param extras: further named expressions exposed as ``pm.Deterministic``
         for diagnostics.
     :param inputs: ordered input names, i.e. the expected column order of
@@ -211,19 +263,37 @@ class FormulaModel:
     def __init__(
         self,
         mu: str,
-        sigma: str,
-        lower: float | None = 0.0,
+        sigma: str | None = None,
+        lower: float | None = _UNSET,
         extras: dict[str, str] | None = None,
         inputs: list[str] | tuple[str, ...] | None = None,
+        likelihood: str | None = None,
+        params: dict[str, str | float] | None = None,
     ):
+        if params is None:
+            if sigma is None:
+                raise FormulaError("Give the likelihood parameters in params")
+            lower = 0.0 if lower is _UNSET else lower
+            params = {"sigma": sigma}
+            if lower is not None:
+                params["lower"] = lower
+        elif sigma is not None or lower is not _UNSET:
+            raise FormulaError("Give either params or sigma/lower, not both")
+        if likelihood is None:
+            likelihood = "TruncatedNormal" if "lower" in params else "Normal"
+        _check_params(likelihood, params)
+
         self.mu = mu
-        self.sigma = sigma
-        self.lower = lower
+        self.likelihood = likelihood
+        self.params = dict(params)
         self.extras = dict(extras or {})
-        reserved = {"mu", "sigma", "lower"} & set(self.extras)
+        reserved = ({"mu"} | set(self.params)) & set(self.extras)
         if reserved:
             raise FormulaError(f"Reserved extras names: {sorted(reserved)}")
-        self._trees = {"mu": _parse(mu), "sigma": _parse(sigma)}
+        self._trees = {"mu": _parse(mu)}
+        self._trees.update(
+            {name: _parse(v) for name, v in self.params.items() if isinstance(v, str)}
+        )
         self._trees.update({name: _parse(e) for name, e in self.extras.items()})
 
         self.symbols: list[str] = []
@@ -240,6 +310,24 @@ class FormulaModel:
         self.inputs = None if inputs is None else tuple(inputs)
         if self.inputs is not None:
             self._check_inputs(self.inputs)
+
+    @property
+    def likelihood_dist(self):
+        """The PyMC distribution class of the observations."""
+        return _likelihood_dist(self.likelihood)
+
+    @property
+    def likelihood_params(self) -> list[str]:
+        """Names of the likelihood's arguments other than ``mu``."""
+        return list(self.params)
+
+    @property
+    def sigma(self):
+        return self.params.get("sigma")
+
+    @property
+    def lower(self):
+        return self.params.get("lower")
 
     def _check_inputs(self, inputs):
         unknown = [name for name in inputs if name not in self.symbols]
@@ -305,14 +393,19 @@ class FormulaModel:
             for name, tree in self._trees.items()
         }
         mu = values.pop("mu")
-        out = {"sigma": values.pop("sigma")}
-        if self.lower is not None:
-            out["lower"] = pt.constant(float(self.lower))
+        out = {
+            name: values.pop(name) if isinstance(v, str) else pt.constant(float(v))
+            for name, v in self.params.items()
+        }
         out.update(values)
         return mu, out
 
     def to_dict(self) -> dict:
-        spec = {"mu": self.mu, "sigma": self.sigma, "lower": self.lower}
+        spec = {
+            "likelihood": self.likelihood,
+            "mu": self.mu,
+            "params": dict(self.params),
+        }
         if self.extras:
             spec["extras"] = dict(self.extras)
         if self.inputs is not None:
@@ -325,5 +418,6 @@ class FormulaModel:
 
     def __repr__(self):
         return (
-            f"FormulaModel(mu={self.mu!r}, sigma={self.sigma!r}, lower={self.lower!r})"
+            f"FormulaModel(likelihood={self.likelihood!r}, mu={self.mu!r}, "
+            f"params={self.params!r})"
         )

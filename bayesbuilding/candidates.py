@@ -9,7 +9,11 @@ A config file looks like::
       "candidates": [
         {
           "name": "dt_occ",
-          "model": {"mu": "g[occ]*dt - fs[occ]*rad", "sigma": "s0[occ]", "lower": 0.0},
+          "model": {
+              "likelihood": "TruncatedNormal",
+              "mu": "g[occ]*dt - fs[occ]*rad",
+              "params": {"sigma": "s0[occ]", "lower": 0.0}
+          },
           "inputs": {"dt": "<column>", "rad": "<column>", "occ": "<column>"},
           "priors": {
               "g": {"dist": "HalfNormal", "kwargs": {"sigma": 10, "shape": 2}},
@@ -21,7 +25,9 @@ A config file looks like::
       "unused_candidates": []
     }
 
-``model`` is a :class:`~bayesbuilding.formula.FormulaModel` spec. ``inputs`` maps
+``model`` is a :class:`~bayesbuilding.formula.FormulaModel` spec: the
+likelihood distribution, the formula of its mean ``mu`` and its other
+parameters ``params`` (formulas or numbers). ``inputs`` maps
 each input symbol of the formula to a real column name, since column names vary
 from one site to the next. ``feature_pipe`` is an opaque dict left to the caller
 (e.g. a Tide pipe computing the columns once for every candidate).
@@ -36,6 +42,7 @@ import pymc as pm
 
 from bayesbuilding.formula import FormulaModel
 from bayesbuilding.legacy_formulas import legacy_to_formula
+from bayesbuilding.wrapper import PymcWrapper
 
 
 def build_priors_dict(priors: dict) -> dict:
@@ -86,6 +93,17 @@ class CandidateConfig:
             self.model.bind(self.priors)
         except ValueError as e:
             raise ValueError(f"Candidate {self.name!r}: {e}") from e
+
+    def build_wrapper(self, priors: dict = None) -> PymcWrapper:
+        """An unsampled PymcWrapper for this candidate, with the likelihood
+        declared in ``model``. ``priors`` (a priors spec, e.g. from
+        :func:`posterior_as_priors`) defaults to ``self.priors``."""
+        return PymcWrapper(
+            model_function=self.model,
+            priors_dict=build_priors_dict(
+                priors if priors is not None else self.priors
+            ),
+        )
 
     def to_dict(self) -> dict:
         spec = self.model.to_dict()

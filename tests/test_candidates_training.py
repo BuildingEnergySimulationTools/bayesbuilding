@@ -41,9 +41,9 @@ CONFIG_PAYLOAD = {
         {
             "name": "dt_change_point",
             "model": {
+                "likelihood": "TruncatedNormal",
                 "mu": "g*max(dt - tau, 0) + base",
-                "sigma": "sigma",
-                "lower": 0.0,
+                "params": {"sigma": "sigma", "lower": 0.0},
             },
             "inputs": {"dt": "dt__C__Zone__FULL"},
             "priors": PRIORS_DT,
@@ -99,6 +99,29 @@ class TestConfig:
             )
         assert candidate.model.mu == LEGACY_FORMULAS["season_cp_heating_es_dt"]["mu"]
         assert candidate.model.lower == 0.0
+
+    def test_build_wrapper_uses_the_declared_likelihood(self):
+        config = BayesConfig.from_dict(CONFIG_PAYLOAD)
+        wrapper = config.candidates[0].build_wrapper()
+        assert wrapper.likelihood is pm.TruncatedNormal
+        assert wrapper.likelihood_params == ["sigma", "lower"]
+        assert wrapper.priors_dict["g"] == (
+            pm.Normal,
+            {"name": "g", **PRIORS_DT["g"]["kwargs"]},
+        )
+        # The older {"mu", "sigma"} form keeps its default lower=0.0.
+        unused = config.unused_candidates[0].build_wrapper()
+        assert unused.likelihood is pm.TruncatedNormal
+        assert unused.likelihood_params == ["sigma", "lower"]
+
+    def test_build_wrapper_accepts_other_priors(self):
+        candidate = BayesConfig.from_dict(CONFIG_PAYLOAD).candidates[0]
+        priors = {
+            **PRIORS_DT,
+            "g": {"dist": "Normal", "kwargs": {"mu": 5.0, "sigma": 1.0}},
+        }
+        wrapper = candidate.build_wrapper(priors)
+        assert wrapper.priors_dict["g"][1]["mu"] == 5.0
 
     def test_candidate_errors_name_the_candidate(self):
         with pytest.raises(ValueError, match="'bad'.*indices"):

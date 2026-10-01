@@ -10,7 +10,7 @@ import pandas as pd
 import pymc as pm
 import xarray as xr
 
-from bayesbuilding.candidates import BayesConfig, CandidateConfig, build_priors_dict
+from bayesbuilding.candidates import BayesConfig, CandidateConfig
 from bayesbuilding.wrapper import PymcWrapper, r2_score, resample_samples
 
 
@@ -65,8 +65,8 @@ def fit_candidate(
 ) -> PymcWrapper:
     """Build, sample (prior + posterior) and persist a PymcWrapper for one candidate.
 
-    The likelihood is a Normal truncated at ``candidate.model.lower`` (an energy
-    consumption cannot be negative), or a plain Normal when ``lower`` is None.
+    The likelihood is the one declared in the candidate's model (see
+    :meth:`~bayesbuilding.candidates.CandidateConfig.build_wrapper`).
 
     ``priors`` defaults to ``candidate.priors`` (the config's declared priors).
     Passing a different priors spec (e.g. from :func:`~bayesbuilding.candidates.
@@ -77,18 +77,7 @@ def fit_candidate(
     The wrapper is saved to ``artifact_path / "trace"`` unless ``artifact_path``
     is None.
     """
-    if candidate.model.lower is None:
-        likelihood, likelihood_params = pm.Normal, ["sigma"]
-    else:
-        likelihood, likelihood_params = pm.TruncatedNormal, ["sigma", "lower"]
-    wrapper = PymcWrapper(
-        model_function=candidate.model,
-        priors_dict=build_priors_dict(
-            priors if priors is not None else candidate.priors
-        ),
-        likelihood=likelihood,
-        likelihood_params=likelihood_params,
-    )
+    wrapper = candidate.build_wrapper(priors)
     wrapper.sample_prior(
         samples=candidate.prior_draws,
         x=x,

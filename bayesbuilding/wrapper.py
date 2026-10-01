@@ -91,14 +91,16 @@ class PymcWrapper:
         `variables_dict`; they are never looked up by the wrapper itself to
         build the likelihood -- `model_function` decides explicitly what feeds
         `mu` and each of `likelihood_params` (see above).
-    likelihood : Callable, default pm.Normal
+    likelihood : Callable, optional
         The PyMC distribution class used to build the "observations" likelihood.
         Must accept a `mu` kwarg, plus whatever names are listed in
-        `likelihood_params`.
+        `likelihood_params`. Defaults to the likelihood declared by a
+        `FormulaModel` model_function, else pm.Normal.
     likelihood_params : list[str], optional
         Names of the likelihood's kwargs, beyond `mu`, that `model_function`
-        must return in its `extras` dict (e.g. `["sigma"]`, the default, or
-        `["sigma", "nu"]` for a Student-T likelihood).
+        must return in its `extras` dict (e.g. `["sigma"]` or
+        `["sigma", "nu"]` for a Student-T likelihood). Defaults to the params
+        declared by a `FormulaModel` model_function, else `["sigma"]`.
 
     Attributes:
     -----------
@@ -158,7 +160,7 @@ class PymcWrapper:
         self,
         model_function: Callable = None,
         priors_dict: dict[str:(Callable, dict)] = None,
-        likelihood: Callable = pm.Normal,
+        likelihood: Callable = None,
         likelihood_params: list[str] = None,
     ):
         self.model_function = model_function
@@ -167,10 +169,16 @@ class PymcWrapper:
         self.target_name = None
         self.var_names = None
         self.model = None
+        # A FormulaModel declares its own likelihood: use it unless overridden.
+        is_formula = isinstance(model_function, FormulaModel)
+        if likelihood is None:
+            likelihood = model_function.likelihood_dist if is_formula else pm.Normal
+        if likelihood_params is None:
+            likelihood_params = (
+                model_function.likelihood_params if is_formula else ["sigma"]
+            )
         self.likelihood = likelihood
-        self.likelihood_params = (
-            likelihood_params if likelihood_params is not None else ["sigma"]
-        )
+        self.likelihood_params = likelihood_params
         self.traces = {
             "prior": az.InferenceData(),
             "sampling": az.InferenceData(),

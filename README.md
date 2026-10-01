@@ -63,9 +63,14 @@ data = pd.DataFrame(
 data["heating"] = 50 * np.maximum(14 - data["Text"], 0) + 50 + np.random.randn(12) * 5
 
 # Define the model and priors for a seasonal change-point energy signature.
-# Symbols that are not priors are inputs, i.e. columns of x.
+# Symbols that are not priors are inputs, i.e. columns of x. The likelihood
+# declared in the FormulaModel is the one the wrapper uses.
 model = PymcWrapper(
-    model_function=FormulaModel(mu="g*max(tau - Text, 0) + base", sigma="sigma"),
+    model_function=FormulaModel(
+        likelihood="TruncatedNormal",
+        mu="g*max(tau - Text, 0) + base",
+        params={"sigma": "sigma", "lower": 0.0},
+    ),
     priors_dict={
         "g": (pm.Normal, dict(name="g", mu=40, sigma=5)),
         "tau": (pm.Normal, dict(name="tau", mu=12, sigma=1)),
@@ -92,22 +97,85 @@ reloaded.load_model("my_model")
 - Operators `+ - * / **`, numeric constants, and the functions `max(a, b)`,
   `min(a, b)`, `switch(cond, a, b)`, `sigmoid`, `sqrt`, `exp`, `log`, `abs`.
 - `g[occ]` / `g[occ, 1]` index a vector/matrix prior by a categorical input.
-- `sigma` is the likelihood scale and may be heteroscedastic, e.g.
-  `"sqrt(s0[occ]**2 + (s1*sigmoid((tau - text)/1.5))**2)"`; `lower` (default `0.0`)
-  is returned for a `TruncatedNormal` likelihood, `None` disables it.
 - Input order (the columns of `x`): continuous drivers first, then categorical inputs,
   each in order of first appearance.
 
-Expressions are parsed against a whitelist, never `eval`-ed. In a candidate config:
+Expressions are parsed against a whitelist, never `eval`-ed.
 
-```json
-{
-  "name": "dt_occ",
-  "model": {"mu": "g[occ]*dt - fs[occ]*rad", "sigma": "s0[occ]", "lower": 0.0},
-  "inputs": {"dt": "dt__C", "rad": "GHI__W/m2", "occ": "occupation"},
-  "priors": {"g": {"dist": "HalfNormal", "kwargs": {"sigma": 500, "shape": 2}}, "...": {}}
+## Likelihood
+
+A model declares the distribution of the observations explicitly:
+
+- `likelihood`: the name of a PyMC distribution (`"Normal"`, `"TruncatedNormal"`,
+  `"StudentT"`, ...).
+- `mu`: the formula of its mean.
+- `params`: every other argument of that distribution, each a formula or a number.
+  `sigma` may be heteroscedastic, e.g.
+  `"sqrt(s0[occ]**2 + (s1*sigmoid((tau - text)/1.5))**2)"`. Parameter names are
+  checked against the distribution's signature.
+
+`TruncatedNormal`'s `lower` is the truncation bound: observations are `Normal(mu, sigma)`
+restricted to `[lower, +inf)` and renormalized, since an energy consumption cannot be
+negative. It matters when `mu` gets close to 0 (summer, mid-season): a plain `Normal`
+would put some probability on negative consumptions. If the data contain many exact
+zeros (heating off), a censored likelihood describes them better than a truncated one.
+
+The older form `{"mu": ..., "sigma": ..., "lower": 0.0}` is still accepted: it means a
+`TruncatedNormal`, or a `Normal` when `lower` is `null`.
+
+## From a candidate dict to a wrapper
+
+A candidate model is a JSON-serializable dict. `inputs` maps each input symbol of the
+formulas to a column of your data:
+
+```python
+import numpy as np
+import pandas as pd
+
+from bayesbuilding.candidates import CandidateConfig
+from bayesbuilding.training import build_candidate_xy
+
+candidate_dict = {
+    "name": "dt_occ",
+    "model": {
+        "likelihood": "TruncatedNormal",
+        "mu": "g[occ]*dt - fs[occ]*rad",
+        "params": {"sigma": "s0[occ]", "lower": 0.0},
+    },
+    "inputs": {"dt": "dt__C", "rad": "GHI__W/m2", "occ": "occupation"},
+    "priors": {
+        "g": {"dist": "HalfNormal", "kwargs": {"sigma": 500, "shape": 2}},
+        "fs": {"dist": "HalfNormal", "kwargs": {"sigma": 5, "shape": 2}},
+        "s0": {"dist": "HalfNormal", "kwargs": {"sigma": 500, "shape": 2}},
+    },
+    "draws": 1000,
+    "tune": 1000,
 }
+
+# Daily data: indoor/outdoor temperature difference, solar radiation, occupation
+rng = np.random.default_rng(0)
+df = pd.DataFrame(
+    {
+        "dt__C": rng.uniform(0, 20, 120),
+        "GHI__W/m2": rng.uniform(0, 300, 120),
+        "occupation": rng.integers(0, 2, 120),
+    },
+    index=pd.date_range("2024-01-01", freq="D", periods=120),
+)
+df["heating"] = np.maximum(
+    np.where(df["occupation"] == 1, 300, 150) * df["dt__C"] - 2 * df["GHI__W/m2"], 0
+) + rng.normal(0, 100, 120).clip(0)
+
+candidate = CandidateConfig(**candidate_dict)
+wrapper = candidate.build_wrapper()  # a PymcWrapper with a TruncatedNormal likelihood
+x, y = build_candidate_xy(df, "heating", candidate)  # columns in the formula's order
+wrapper.sample(x=x, y=y, draws=candidate.draws, tune=candidate.tune)
+print(wrapper.get_summary(group="sampling"))
 ```
+
+A whole config (several candidates sharing a target) is loaded with
+`BayesConfig.from_json(path)`, and `bayesbuilding.training.train_candidates` fits, scores
+and ranks all its candidates.
 
 See `tests/test_wrapper.py` for a complete end-to-end example, including scoring on held-out
 data and plotting predictions with `bayesbuilding.plotting.time_series_hdi` and

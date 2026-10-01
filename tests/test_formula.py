@@ -100,6 +100,81 @@ class TestParsing:
         assert clone.inputs == ("dt",)
 
 
+class TestLikelihood:
+    def test_older_form_means_truncated_normal_or_normal(self):
+        truncated = FormulaModel(mu="g*dt", sigma="sigma")
+        assert truncated.likelihood == "TruncatedNormal"
+        assert truncated.params == {"sigma": "sigma", "lower": 0.0}
+        plain = FormulaModel(mu="g*dt", sigma="sigma", lower=None)
+        assert plain.likelihood == "Normal"
+        assert plain.params == {"sigma": "sigma"}
+
+    def test_older_spec_loads_as_explicit_spec(self):
+        old = FormulaModel.from_dict({"mu": "g*dt", "sigma": "s0", "lower": 0.0})
+        assert old.to_dict() == {
+            "likelihood": "TruncatedNormal",
+            "mu": "g*dt",
+            "params": {"sigma": "s0", "lower": 0.0},
+        }
+
+    def test_likelihood_inferred_from_params(self):
+        model = FormulaModel(mu="g*dt", params={"sigma": "s0"})
+        assert model.likelihood == "Normal"
+        assert model.likelihood_dist is pm.Normal
+
+    def test_student_t_params_formula_and_number(self):
+        model = FormulaModel(
+            likelihood="StudentT", mu="g*dt", params={"sigma": "s0*2", "nu": 4}
+        )
+        variables = {"g": pt.constant(1.0), "s0": pt.constant(1.5)}
+        _, extras = model(pt.as_tensor_variable(np.ones((3, 1))), variables)
+        assert float(extras["sigma"].eval()) == 3.0
+        assert float(extras["nu"].eval()) == 4.0
+        assert model.likelihood_params == ["sigma", "nu"]
+
+    @pytest.mark.parametrize(
+        "kwargs, match",
+        [
+            ({"likelihood": "Bogus", "params": {"sigma": "s"}}, "Unknown"),
+            ({"likelihood": "exp", "params": {"sigma": "s"}}, "Unknown"),
+            ({"likelihood": "Normal", "params": {"sgima": "s"}}, "does not accept"),
+            ({"likelihood": "Normal", "params": {"mu": "s"}}, "'mu'"),
+            ({"likelihood": "Normal", "params": {"sigma": [1]}}, "formula or"),
+            ({"params": {"sigma": "s"}, "sigma": "s"}, "not both"),
+            ({"params": {"sigma": "s"}, "lower": 0.0}, "not both"),
+            ({}, "params"),
+        ],
+    )
+    def test_invalid_likelihood_specs(self, kwargs, match):
+        with pytest.raises(FormulaError, match=match):
+            FormulaModel(mu="g*dt", **kwargs)
+
+    def test_extras_cannot_shadow_a_param(self):
+        with pytest.raises(FormulaError, match="Reserved"):
+            FormulaModel(
+                likelihood="StudentT",
+                mu="g*dt",
+                params={"sigma": "s", "nu": 3},
+                extras={"nu": "g"},
+            )
+
+    def test_wrapper_takes_the_likelihood_from_the_formula(self):
+        model = FormulaModel(
+            likelihood="StudentT", mu="g*dt", params={"sigma": "s0", "nu": 4}
+        )
+        wrapper = PymcWrapper(model_function=model, priors_dict={})
+        assert wrapper.likelihood is pm.StudentT
+        assert wrapper.likelihood_params == ["sigma", "nu"]
+        # An explicit likelihood still wins.
+        wrapper = PymcWrapper(
+            model_function=model,
+            priors_dict={},
+            likelihood=pm.Normal,
+            likelihood_params=["sigma"],
+        )
+        assert wrapper.likelihood is pm.Normal
+
+
 class TestEvaluation:
     def test_evaluates_indexing_and_functions(self):
         x = np.array([[10.0, 0.0], [2.0, 1.0]])  # columns: text, occ
