@@ -34,14 +34,12 @@ from one site to the next. ``feature_pipe`` is an opaque dict left to the caller
 """
 
 import json
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pymc as pm
 
 from bayesbuilding.formula import FormulaModel
-from bayesbuilding.legacy_formulas import legacy_to_formula
 from bayesbuilding.wrapper import PymcWrapper
 
 
@@ -63,9 +61,7 @@ class CandidateConfig:
 
     ``model`` is given as a formula spec dict (or a FormulaModel) and is stored
     as a FormulaModel bound to the prior names, so ``model.inputs`` is the
-    ordered list of input symbols. A legacy model name (a string) is still
-    accepted and translated with :func:`~bayesbuilding.legacy_formulas.
-    legacy_to_formula`, with a DeprecationWarning.
+    ordered list of input symbols.
     """
 
     name: str
@@ -79,14 +75,6 @@ class CandidateConfig:
     random_seed: int | None = None
 
     def __post_init__(self):
-        if isinstance(self.model, str):
-            warnings.warn(
-                f"Candidate {self.name!r}: legacy model name {self.model!r}, "
-                "replace it by its formula (see legacy_to_formula)",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-            self.model = legacy_to_formula(self.model)
         if isinstance(self.model, dict):
             self.model = FormulaModel.from_dict(self.model)
         try:

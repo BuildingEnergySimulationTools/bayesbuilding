@@ -50,9 +50,9 @@ def xbar_control_stats(
     setup, unlike a credible band that would re-propagate the model's own
     parameter uncertainty into the limits on every point. ``sigma_hat`` is
     per-day (not pooled into one scalar for the whole period): for a model
-    with a heteroscedastic noise term (e.g.
-    ``bayesbuilding.models.heating_cp_occ_rad``'s ``sigma`` growing with
-    heating activity), the limits should genuinely narrow/widen with it
+    with a heteroscedastic noise term (e.g. a FormulaModel `sigma` formula
+    ``"sqrt(s0[occ]**2 + (s1*sigmoid((tau[occ] - text)/1.5))**2)"`` growing
+    with heating activity), the limits should genuinely narrow/widen with it
     instead of being forced flat.
 
     Returns a dict with ``residual``, ``mu_hat``, ``sigma_hat``, ``ucl``

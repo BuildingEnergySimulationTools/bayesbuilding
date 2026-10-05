@@ -1,10 +1,9 @@
 import json
 import os
+import warnings
 from collections.abc import Callable
 from pathlib import Path
-import bayesbuilding.models as mods
 from bayesbuilding.formula import FormulaModel
-import warnings
 
 import arviz as az
 import numpy as np
@@ -76,8 +75,8 @@ class PymcWrapper:
         where a model computes its own (possibly heteroscedastic or per-category)
         noise term, from quantities only the model itself has access to (e.g.
         `sigma = s0 + alpha * heat`, or `sigma = variables_dict["sigma"][state]`
-        for a change-point-indexed sigma -- see
-        `bayesbuilding.models.heating_cp_occ_rad`). ``extras`` may also contain
+        for a change-point-indexed sigma -- see `bayesbuilding.formula.FormulaModel`,
+        whose `params` formulas express exactly this). ``extras`` may also contain
         further named quantities not required by `likelihood_params`, exposed as
         extra `pm.Deterministic`s for diagnostics (e.g. an internal 'heat' term).
         A bare tensor return (no tuple) is only valid when `likelihood_params`
@@ -147,10 +146,9 @@ class PymcWrapper:
     load_model(Path):
         Load the model traces and json file contained in the desired path and build
         the pymc model.
-        A FormulaModel is rebuilt from its saved spec. A legacy model function
-        is looked up by name in bayesbuilding.models; if it is not there, it
-        must be provided separately and the pymc model must be build using the
-        build_model() method.
+        A FormulaModel is rebuilt from its saved spec. Any other model_function
+        was saved by name only: reattach it (self.model_function = ...) and
+        call build_model() again.
     plot_dist_comparison(var_names):
         Plot compare prior and posterior distributions of variables and observations
         var_names arguments filter the values to display. default is self.var_names
@@ -222,9 +220,9 @@ class PymcWrapper:
             traces.to_netcdf((dir_path / f"{name}.nc").as_posix(), engine="h5netcdf")
 
         with open(dir_path / "config.json", "w", encoding="utf-8") as f:
-            # A FormulaModel is saved as its spec (rebuilt on load); a legacy
-            # model function is saved by name and looked up in
-            # bayesbuilding.models on load.
+            # A FormulaModel is saved as its spec and rebuilt from it on load;
+            # any other model_function is saved by name only and must be
+            # reattached before build_model() is called again.
             is_formula = hasattr(self.model_function, "to_dict")
             to_dump = {
                 "model_function": None if is_formula else self.model_function,
@@ -268,15 +266,15 @@ class PymcWrapper:
         if model_spec is not None:
             self.model_function = FormulaModel.from_dict(model_spec)
         elif self.model_function is not None:
-            try:
-                self.model_function = getattr(mods, self.model_function)
-            except AttributeError:
-                warnings.warn(
-                    f"Model function {self.model_function} not found in"
-                    f"bayesbuilding.models. Load a model function before running"
-                    f"build_model() method"
-                )
-                self.model_function = None
+            # Only the function's name was saved (see save_model): it must be
+            # reattached (self.model_function = ...) before build_model() is
+            # called again.
+            warnings.warn(
+                f"model_function {self.model_function!r} was saved by name "
+                "only. Set self.model_function to the actual callable before "
+                "running build_model()."
+            )
+            self.model_function = None
 
         self.build_model()
 

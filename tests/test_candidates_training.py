@@ -14,7 +14,6 @@ from bayesbuilding.candidates import (
     posterior_as_priors,
 )
 from bayesbuilding.formula import FormulaModel
-from bayesbuilding.legacy_formulas import LEGACY_FORMULAS, legacy_to_formula
 from bayesbuilding.training import (
     build_candidate_xy,
     cv_rmse,
@@ -24,7 +23,6 @@ from bayesbuilding.training import (
     train_candidates,
 )
 from bayesbuilding.wrapper import PymcWrapper
-from tests.test_formula_legacy_equivalence import PRIOR_SHAPES
 
 PRIORS_DT = {
     "g": {"dist": "Normal", "kwargs": {"mu": 100.0, "sigma": 10.0}},
@@ -88,17 +86,6 @@ class TestConfig:
     def test_unused_candidates_is_optional(self):
         payload = {k: v for k, v in CONFIG_PAYLOAD.items() if k != "unused_candidates"}
         assert BayesConfig.from_dict(payload).unused_candidates == []
-
-    def test_legacy_model_name_is_translated_with_a_warning(self):
-        with pytest.warns(DeprecationWarning, match="legacy model name"):
-            candidate = CandidateConfig(
-                name="legacy",
-                model="season_cp_heating_es_dt",
-                inputs={"dt": "dt__C"},
-                priors=PRIORS_DT,
-            )
-        assert candidate.model.mu == LEGACY_FORMULAS["season_cp_heating_es_dt"]["mu"]
-        assert candidate.model.lower == 0.0
 
     def test_build_wrapper_uses_the_declared_likelihood(self):
         config = BayesConfig.from_dict(CONFIG_PAYLOAD)
@@ -169,28 +156,6 @@ class TestBuildCandidateXY:
         )
         with pytest.raises(KeyError, match="incomplete"):
             build_candidate_xy(df, "target", candidate)
-
-
-@pytest.mark.parametrize("name", sorted(LEGACY_FORMULAS))
-def test_every_legacy_formula_builds_a_truncated_normal_wrapper(name):
-    """What fit_candidate builds, minus the (expensive) sampling."""
-    priors = {
-        var: {"dist": "HalfNormal", "kwargs": {"sigma": 1.0, "shape": shape or None}}
-        for var, shape in PRIOR_SHAPES[name].items()
-    }
-    for spec in priors.values():
-        if spec["kwargs"]["shape"] is None:
-            del spec["kwargs"]["shape"]
-    candidate = CandidateConfig(
-        name=name, model=legacy_to_formula(name), inputs={}, priors=priors
-    )
-    wrapper = PymcWrapper(
-        model_function=candidate.model,
-        priors_dict=build_priors_dict(priors),
-        likelihood=pm.TruncatedNormal,
-        likelihood_params=["sigma", "lower"],
-    )
-    assert "mu" in {rv.name for rv in wrapper.model.deterministics}
 
 
 def test_posterior_as_priors_does_not_inject_mu_for_half_normal():

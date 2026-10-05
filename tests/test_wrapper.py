@@ -7,7 +7,7 @@ import pandas as pd
 import pymc as pm
 import pytest
 
-from bayesbuilding.models import season_cp_heating_es
+from bayesbuilding.formula import FormulaModel
 from bayesbuilding.plotting import time_series_hdi, changepoint_graph
 from bayesbuilding.wrapper import PymcWrapper, resample_samples
 
@@ -114,7 +114,10 @@ class TestWrapper:
         data_test = data.loc["2024", :]
 
         test_model = PymcWrapper(
-            model_function=season_cp_heating_es,
+            model_function=FormulaModel(
+                mu="g*max(tau - text, 0) + base",
+                params={"sigma": "sigma"},
+            ),
             priors_dict={
                 "g": (pm.Normal, dict(name="g", mu=40, sigma=5)),
                 "tau": (pm.Normal, dict(name="tau", mu=12, sigma=1)),
@@ -216,7 +219,10 @@ class TestWrapper:
         )
 
         test_model = PymcWrapper(
-            model_function=season_cp_heating_es,
+            model_function=FormulaModel(
+                mu="g*max(tau - text, 0) + base",
+                params={"sigma": "sigma"},
+            ),
             priors_dict={
                 "g": (pm.Normal, dict(name="g", mu=40, sigma=5)),
                 "tau": (pm.Normal, dict(name="tau", mu=12, sigma=1)),

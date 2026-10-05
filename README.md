@@ -25,8 +25,7 @@ project.
   sampling, scoring, LOO cross-validation, and saving/loading fitted models to disk.
 - Forward models written as formulas (`bayesbuilding.formula.FormulaModel`), e.g.
   `"g[occ]*max(tau - text, 0) - fs*rad + base[occ]"`: no Python function to write for
-  a new model variant. (`bayesbuilding.models` holds the older hand-written functions,
-  frozen and kept only to reload traces saved with them.)
+  a new model variant.
 - JSON candidate configs (`bayesbuilding.candidates`) and a training loop that fits,
   scores (LOO, R2, NMBE, CV(RMSE), MAE at daily/weekly/monthly resolution) and ranks
   candidates (`bayesbuilding.training.train_candidates`).

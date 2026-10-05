@@ -2,7 +2,7 @@
 
 A :class:`FormulaModel` is a ``model_function`` for :class:`~bayesbuilding.wrapper.
 PymcWrapper` built from plain-text expressions, so that a new model variant is
-a line of JSON rather than a new function in :mod:`bayesbuilding.models`::
+a line of JSON rather than a new Python function::
 
     FormulaModel(
         likelihood="TruncatedNormal",
